@@ -1,8 +1,14 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 from functions import *
 from data_loader_one_step_UVS import load_test_data
 from data_loader_one_step_UVS import load_train_data
 import wandb
-
+#torch.cuda.set_device(0)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+print(device)
+print("\n\n\n")
 wandb.init(project='diffusionMD')
 
 
@@ -82,7 +88,7 @@ for epoch in range(0, num_epochs):  # loop over the dataset multiple times
             # zero the parameter gradients
             optimizer.zero_grad()
             t = torch.randint(0, T, (batch_size,), device=device).long()
-            loss = get_loss_cond(model, input_batch.float(), t, label_batch.float())
+            loss = get_loss_cond(model, input_batch.float().cuda(), t, label_batch.float().cuda())
             loss.backward()
             optimizer.step()
             wandb.log({'epoch': epoch, 'loss': loss})

@@ -104,7 +104,7 @@ def get_index_from_list(vals, t, x_shape):
     return out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to(t.device)
 
 
-def forward_diffusion_sample(x_0, t, device="cpu"):
+def forward_diffusion_sample(x_0, t, device="cuda"):
     """
     Takes an image and a timestep as input and
     returns the noisy version of it
