@@ -1,61 +1,43 @@
 import numpy as np
 import torch
-print(torch.__version__)
-
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-#from torchinfo import summary
 import sys
 import netCDF4 as nc
 from data_loader_one_step_UVS import load_test_data
 from data_loader_one_step_UVS import load_train_data
-#from count_trainable_params import count_parameters
-#import hdf5storage
 from torch.optim import Adam
 import math
 
-
 def spectral_loss(output, target, wavenum_init,lamda_reg):
-
- loss1 = F.mse_loss(output,target) 
- # loss1 = torch.abs((output-target))/ocean_grid
-
- out_fft = torch.mean(torch.abs(torch.fft.rfft(output,dim=3)),dim=2)
- target_fft = torch.mean(torch.abs(torch.fft.rfft(target,dim=3)),dim=2)
-
- loss2 = torch.mean(torch.abs(out_fft[:,0,wavenum_init:]-target_fft[:,0,wavenum_init:]))
- loss3 = torch.mean(torch.abs(out_fft[:,1,wavenum_init:]-target_fft[:,1,wavenum_init:]))
- loss4 = torch.mean(torch.abs(out_fft[:,2,wavenum_init:]-target_fft[:,2,wavenum_init:]))
- 
-# loss = (1-lamda_reg)*loss1 + 0.33*lamda_reg*loss2 + 0.33*lamda_reg*loss2_ydir + 0.33*LC_loss
- loss = 0.25*(1-lamda_reg)*loss1 + 0.25*(lamda_reg)*loss2 + 0.25*(lamda_reg)*loss3 + 0.25*(lamda_reg)*loss4
-
- return loss
+    loss1 = F.mse_loss(output,target) 
+    out_fft = torch.mean(torch.abs(torch.fft.rfft(output,dim=3)),dim=2)
+    target_fft = torch.mean(torch.abs(torch.fft.rfft(target,dim=3)),dim=2)
+    loss2 = torch.mean(torch.abs(out_fft[:,0,wavenum_init:]-target_fft[:,0,wavenum_init:]))
+    loss3 = torch.mean(torch.abs(out_fft[:,1,wavenum_init:]-target_fft[:,1,wavenum_init:]))
+    loss4 = torch.mean(torch.abs(out_fft[:,2,wavenum_init:]-target_fft[:,2,wavenum_init:]))
+    loss = 0.25*(1-lamda_reg)*loss1 + 0.25*(lamda_reg)*loss2 + 0.25*(lamda_reg)*loss3 + 0.25*(lamda_reg)*loss4
+    return loss
 
 def RK4step(net,input_batch):
- output_1 = net(input_batch.cuda())
- output_2= net(input_batch.cuda()+0.5*output_1)
- output_3 = net(input_batch.cuda()+0.5*output_2)
- output_4 = net(input_batch.cuda()+output_3)
-
- return input_batch.cuda() + (output_1+2*output_2+2*output_3+output_4)/6
-
+    output_1 = net(input_batch.cuda())
+    output_2= net(input_batch.cuda()+0.5*output_1)
+    output_3 = net(input_batch.cuda()+0.5*output_2)
+    output_4 = net(input_batch.cuda()+output_3)
+    return input_batch.cuda() + (output_1+2*output_2+2*output_3+output_4)/6
 
 def Eulerstep(net,input_batch):
- output_1 = net(input_batch.cuda())
- return input_batch.cuda() + delta_t*(output_1)
-
+    output_1 = net(input_batch.cuda())
+    return input_batch.cuda() + delta_t*(output_1)
 
 def PECstep(net,input_batch):
- output_1 = net(input_batch.cuda()) + input_batch.cuda()
- return input_batch.cuda() + delta_t*0.5*(net(input_batch.cuda())+net(output_1))
-
+    output_1 = net(input_batch.cuda()) + input_batch.cuda()
+    return input_batch.cuda() + delta_t*0.5*(net(input_batch.cuda())+net(output_1))
 
 def directstep(net,input_batch):
-  output_1 = net(input_batch.cuda())
-  return output_1
-
+    output_1 = net(input_batch.cuda())
+    return output_1
 
 def get_loss(model, x_0, t):
     x_noisy, noise = forward_diffusion_sample(x_0, t, device) # x_0 + noise = x_noisy 
