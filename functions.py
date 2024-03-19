@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+print(torch.__version__)
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -9,6 +10,23 @@ from data_loader_one_step_UVS import load_test_data
 from data_loader_one_step_UVS import load_train_data
 from torch.optim import Adam
 import math
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+#Parameters
+path_outputs = "./outputs/"
+FF=nc.Dataset('./moistQG/151/output.3d-001.nc')
+Nx=128
+Ny=128
+Nlat =128
+Nlon = 128
+lead = 1
+delta_t =0.01
+
+batch_size = 100
+num_epochs = 10
+lamda_reg =0.2
+wavenum_init=10
+wavenum_init_ydir=10
 
 def spectral_loss(output, target, wavenum_init,lamda_reg):
     loss1 = F.mse_loss(output,target) 
@@ -67,12 +85,9 @@ def sample_timestep(x, t):
         x - betas_t * model(x, t) / sqrt_one_minus_alphas_cumprod_t
     )
     posterior_variance_t = get_index_from_list(posterior_variance, t, x.shape)
-
     if (t==0):
         return model_mean
-
-    else:
-
+    else: 
         noise = torch.randn_like(x)
         return model_mean + torch.sqrt(posterior_variance_t) * noise
 
@@ -87,6 +102,7 @@ def get_index_from_list(vals, t, x_shape):
     batch_size = t.shape[0]
     out = vals.gather(-1, t.cpu())
     return out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to(t.device)
+
 
 def forward_diffusion_sample(x_0, t, device="cpu"):
     """
@@ -199,3 +215,18 @@ class SimpleUnet(nn.Module):
             x = torch.cat((x, residual_x), dim=1)
             x = up(x, t)
         return self.output(x)
+
+
+
+# Define beta schedule
+T = 300
+betas = linear_beta_schedule(timesteps=T)
+
+# Pre-calculate different terms for closed form
+alphas = 1. - betas
+alphas_cumprod = torch.cumprod(alphas, axis=0)
+alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1, 0), value=1.0)
+sqrt_recip_alphas = torch.sqrt(1.0 / alphas)
+sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
+sqrt_one_minus_alphas_cumprod = torch.sqrt(1. - alphas_cumprod)
+posterior_variance = betas * (1. - alphas_cumprod_prev) / (1. - alphas_cumprod)
