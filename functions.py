@@ -23,7 +23,6 @@ lead = 1
 delta_t =0.01
 
 batch_size = 100
-num_epochs = 10
 lamda_reg =0.2
 wavenum_init=10
 wavenum_init_ydir=10
@@ -32,10 +31,21 @@ def spectral_loss(output, target, wavenum_init,lamda_reg):
     loss1 = F.mse_loss(output,target) 
     out_fft = torch.mean(torch.abs(torch.fft.rfft(output,dim=3)),dim=2)
     target_fft = torch.mean(torch.abs(torch.fft.rfft(target,dim=3)),dim=2)
-    loss2 = torch.mean(torch.abs(out_fft[:,0,wavenum_init:]-target_fft[:,0,wavenum_init:]))
-    loss3 = torch.mean(torch.abs(out_fft[:,1,wavenum_init:]-target_fft[:,1,wavenum_init:]))
-    loss4 = torch.mean(torch.abs(out_fft[:,2,wavenum_init:]-target_fft[:,2,wavenum_init:]))
-    loss = 0.25*(1-lamda_reg)*loss1 + 0.25*(lamda_reg)*loss2 + 0.25*(lamda_reg)*loss3 + 0.25*(lamda_reg)*loss4
+    _,n,_ = out_fft.shape
+    #TODO
+    loss = []
+    for i in range(n):
+        loss.append(torch.mean(torch.abs(out_fft[:,i,wavenum_init:]-target_fft[:,i,wavenum_init:])))
+    alpha = float(1/(1+n))
+    loss_ = []
+    for i in range(n):
+        loss_.append(alpha*lamda_reg*loss[i].cpu().detach().numpy())
+    loss = np.sum(loss_)
+    #loss2 = torch.mean(torch.abs(out_fft[:,0,wavenum_init:]-target_fft[:,0,wavenum_init:]))
+    #loss3 = torch.mean(torch.abs(out_fft[:,1,wavenum_init:]-target_fft[:,1,wavenum_init:]))
+    #loss4 = torch.mean(torch.abs(out_fft[:,2,wavenum_init:]-target_fft[:,2,wavenum_init:]))
+    #loss = 0.25*(1-lamda_reg)*loss1 + 0.25*(lamda_reg)*loss2 + 0.25*(lamda_reg)*loss3 + 0.25*(lamda_reg)*loss4
+    loss = alpha*(1-lamda_reg)*loss1 + loss
     return loss
 
 def RK4step(net,input_batch):
