@@ -15,7 +15,7 @@
 
 
 
-
+# %%
 # Input
 temperature_K = 300.0
 supercell_size = (4,4,4)
@@ -215,3 +215,5 @@ plt.show()
 
 
 
+
+# %%
