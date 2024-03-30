@@ -24,29 +24,25 @@ delta_t =0.01
 
 batch_size = 100
 lamda_reg =0.2
-wavenum_init=10
-wavenum_init_ydir=10
+wavenum_init=0 #10
+wavenum_init_ydir=0 #10
 
-def spectral_loss(output, target, wavenum_init,lamda_reg):
+def mse_loss(output, target, wavenum_init,lamda_reg):
     loss1 = F.mse_loss(output,target) 
+    return loss1
+
+def spectral_loss_ashesh(output, target, wavenum_init,lamda_reg):
+    loss1 = F.mse_loss(output,target)
     out_fft = torch.mean(torch.abs(torch.fft.rfft(output,dim=3)),dim=2)
     target_fft = torch.mean(torch.abs(torch.fft.rfft(target,dim=3)),dim=2)
-    _,n,_ = out_fft.shape
-    #TODO
-    loss = []
-    for i in range(n):
-        loss.append(torch.mean(torch.abs(out_fft[:,i,wavenum_init:]-target_fft[:,i,wavenum_init:])))
-    alpha = float(1/(1+n))
-    loss_ = []
-    for i in range(n):
-        loss_.append(alpha*lamda_reg*loss[i].cpu().detach().numpy())
-    loss = np.sum(loss_)
-    #loss2 = torch.mean(torch.abs(out_fft[:,0,wavenum_init:]-target_fft[:,0,wavenum_init:]))
-    #loss3 = torch.mean(torch.abs(out_fft[:,1,wavenum_init:]-target_fft[:,1,wavenum_init:]))
-    #loss4 = torch.mean(torch.abs(out_fft[:,2,wavenum_init:]-target_fft[:,2,wavenum_init:]))
-    #loss = 0.25*(1-lamda_reg)*loss1 + 0.25*(lamda_reg)*loss2 + 0.25*(lamda_reg)*loss3 + 0.25*(lamda_reg)*loss4
-    loss = alpha*(1-lamda_reg)*loss1 + loss
+    loss2 = torch.mean(torch.abs(out_fft[:,0,wavenum_init:]-target_fft[:,0,wavenum_init:]))
+    loss3 = torch.mean(torch.abs(out_fft[:,1,wavenum_init:]-target_fft[:,1,wavenum_init:]))
+    loss4 = torch.mean(torch.abs(out_fft[:,2,wavenum_init:]-target_fft[:,2,wavenum_init:]))
+
+   # loss = (1-lamda_reg)*loss1 + 0.33*lamda_reg*loss2 + 0.33*lamda_reg*loss2_ydir + 0.33*LC_loss
+    loss = 0.25*(1-lamda_reg)*loss1 + 0.25*(lamda_reg)*loss2 + 0.25*(lamda_reg)*loss3 + 0.25*(lamda_reg)*loss4
     return loss
+
 
 def RK4step(net,input_batch):
     output_1 = net(input_batch.cuda())
@@ -75,7 +71,7 @@ def get_loss(model, x_0, t):
 def get_loss_cond(model, x_0, t, label_batch):  #???
     x_noisy, noise = forward_diffusion_sample(x_0, t, device)
     noise_pred = model(x_noisy, t)
-    return  spectral_loss((x_noisy-noise_pred),label_batch ,wavenum_init,lamda_reg)
+    return  mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
 
 @torch.no_grad()
 def sample_timestep(x, t):
@@ -225,6 +221,41 @@ class SimpleUnet(nn.Module):
             x = torch.cat((x, residual_x), dim=1)
             x = up(x, t)
         return self.output(x)
+
+def normalize_md(x):
+    #x: [5000,64,9]
+    d1,d2,d3 = np.shape(x)
+    mean_list = [np.average(x[:,:,i]) for i in range(d3)]
+    std_list = [np.std(x[:,:,i]) for i in range(d3)]
+    for i in range(d3):
+        for index_1 in range(d1):
+            for index_2 in range(d2):
+                 x[index_1,index_2,i] = (x[index_1,index_2,i]-mean_list[i])/(std_list[i])
+    #print(np.amax(x), np.amin(x), mean_list, std_list)
+    return x, mean_list, std_list
+
+
+def denormalize_md(x, mean_list, std_list):
+    #x: [5000,1,64,9]
+    d1,d2,d3,d4=np.shape(x)
+    for i in range(d1):
+        for j in range(d2):
+            for k in range(d3):
+                for l in range(d4):
+                    x[i,j,k,l] = x[i,j,k,l]*std_list[l]+mean_list[l]
+    return x
+
+
+def denormalize_md_pred(x, mean_list, std_list):
+    #x: [:,:,1,64,9]
+    d0, d1,d2,d3,d4=np.shape(x)
+    for ii in range(d0):
+        for i in range(d1):
+            for j in range(d2):
+                for k in range(d3):
+                    for l in range(d4):
+                        x[ii, i,j,k,l] = x[ii, i,j,k,l]*std_list[l]+mean_list[l]
+    return x
 
 
 

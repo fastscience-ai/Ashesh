@@ -140,7 +140,7 @@ class FinalLayer(nn.Module):
         return x
 
 class Transformer(nn.Module):
-    def __init__(self, num_atoms=32, input_size=36, dim=64,
+    def __init__(self, num_atoms=32, input_size=9, dim=64,
                  depth=3, heads=4, mlp_dim=512, k=64, in_channels=1):
         super(Transformer, self).__init__()
         self.dim = dim
@@ -172,23 +172,20 @@ class Transformer(nn.Module):
         #print(x.shape)
         t = self.emb(t)
         x = x.permute([0, 2, 3, 1])
-        #print(x.shape,t.shape) #torch.Size([100, 1, 32, 36]) torch.Size([100, 64])
-        B, N, H, C = x.shape
+        #print("x,t",x.shape,t.shape) #x,t torch.Size([100, 64, 9, 1]) torch.Size([100, 28])
+        #print(x, t)
+        B, N, H, C = x.shape #batch, n_atom, dim_atom, channel
         x_emb = []
         for i in range(N):
-          x_emb.append(self.patches(x[:,i,:,:].reshape([B, H*C])))
+          x_emb.append(self.patches(x[:,i,:,:].reshape([B, H*C])))  # [batch, dim_atom x channel] --> [batch,  emb_dim]
         x = torch.cat(x_emb, 1)
-        x = x.reshape([B, N, -1])
+        x = x.reshape([B, N, -1], print(x))
         #print(t.shape, x.shape, self.pos_embedding.shape)
         #torch.Size([100, 64]) torch.Size([100, 32, 64]) torch.Size([1, 32, 64])
         x += self.pos_embedding
         #print(x.shape, t.shape) #torch.Size([100, 32, 64])
-        
         for layer in self.transformer:
             x = layer(x, t)
-            #print(x.shape) #torch.Size([100, 32, 64])
         x = self.final(x, t)
-        #print(x.shape)
         x = x.reshape([B,C,N,H])
-        #print(x.shape)
         return x
