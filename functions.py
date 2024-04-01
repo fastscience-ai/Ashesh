@@ -14,7 +14,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 #Parameters
 path_outputs = "./outputs/"
-FF=nc.Dataset('./moistQG/151/output.3d-001.nc')
+# FF=nc.Dataset('./moistQG/151/output.3d-001.nc')
 Nx=128
 Ny=128
 Nlat =128
