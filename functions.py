@@ -14,15 +14,10 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 #Parameters
 path_outputs = "./outputs/"
-# FF=nc.Dataset('./moistQG/151/output.3d-001.nc')
-Nx=128
-Ny=128
-Nlat =128
-Nlon = 128
 lead = 1
 delta_t =0.01
 
-batch_size = 100
+batch_size = 1000
 lamda_reg =0.2
 wavenum_init=0 #10
 wavenum_init_ydir=0 #10
@@ -70,7 +65,7 @@ def get_loss(model, x_0, t):
 
 def get_loss_cond(model, x_0, t, label_batch):  #???
     x_noisy, noise = forward_diffusion_sample(x_0, t, device)
-    noise_pred = model(x_noisy, t)
+    noise_pred = model(x_noisy, x_0, t)
     return  mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
 
 @torch.no_grad()
@@ -247,14 +242,14 @@ def denormalize_md(x, mean_list, std_list):
 
 
 def denormalize_md_pred(x, mean_list, std_list):
-    #x: [:,:,1,64,9]
-    d0, d1,d2,d3,d4=np.shape(x)
+    #(1000, 100, 20, 1, 64, 9)
+    d0, d1,d2,_,d3,d4=np.shape(x)
     for ii in range(d0):
         for i in range(d1):
             for j in range(d2):
                 for k in range(d3):
                     for l in range(d4):
-                        x[ii, i,j,k,l] = x[ii, i,j,k,l]*std_list[l]+mean_list[l]
+                        x[ii, i,j,0,k,l] = x[ii,i,j,0,k,l]*std_list[l]+mean_list[l]
     return x
 
 

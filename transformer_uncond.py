@@ -172,21 +172,10 @@ class Transformer(nn.Module):
 
         self.final = FinalLayer(dim, input_size, in_channels)
 
-    def forward(self, x, cond,  t):
+    def forward(self, x,   t):
         #print(x.shape)
         t = self.emb(t)
         x = x.permute([0, 2, 3, 1])
-        cond = cond.permute([0, 2, 3, 1])
-        x=torch.cat([x,cond],1)
-       # print(x.shape)
-        B, _, H, C = x.shape
-        x = torch.reshape(torch.flatten(x), [B, -1])
-        print(x.shape)
-        x = self.input_emb(x)
-        x = torch.reshape(x, [-1, self.dim, self.input_size, 1])
-       # print("x,cond, t",x.shape,cond.shape, t.shape) #x,t torch.Size([100, 64, 9, 1]) torch.Size([100, 28])
-        #print(x, t)
-    
         B, N, H, C = x.shape #batch, n_atom, dim_atom, channel
         print(x.shape)
         x_emb = []
