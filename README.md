@@ -12,7 +12,8 @@ conda env create --file=environments.yml
 https://drive.google.com/drive/folders/1FawjldF4ZslwzdzaNXaa42s5wG3vrgwd?usp=sharing
 ## MD Dataset
 https://drive.google.com/drive/folders/1SfYbW-jTnvWkR93am-c3PyumSZo1AQ9E?usp=sharing
-
+## MD Long_run result
+https://drive.google.com/drive/folders/1SfYbW-jTnvWkR93am-c3PyumSZo1AQ9E?usp=sharing
 # How to setup 
 conda create -n md_diffusion python=3.11
 conda activate md_diffusion
