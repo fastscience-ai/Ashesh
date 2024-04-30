@@ -19,9 +19,8 @@
 # Input
 temperature_K = 300.0
 supercell_size = (4,4,4)
-num_steps = 500
+num_steps = 10
 print("Running MD simulation at", temperature_K, "K")
-
 
 
 
@@ -100,7 +99,7 @@ atoms.set_momenta(atoms.get_momenta() - atoms.get_momenta().mean(axis=0))
 dyn = VelocityVerlet(atoms, 2.5 * units.fs)  # Time step is 2.5 fs
 
 # Setup the trajectory writer
-trajectory_filename = 'argon_trajectory.traj'
+trajectory_filename = 'argon_trajectory_long.traj'
 traj = Trajectory(trajectory_filename, 'w', atoms)
 
 # Attach the trajectory to the dynamics
@@ -119,9 +118,8 @@ def record_energy(a=atoms):
 
 # Now perform the simulation and record energies
 for step in tqdm(range(num_steps)):  # Number of steps
-    dyn.run(100)  # Run simulation for 100 * 2.5 fs = 250 fs
+    dyn.run(5000)  # Run simulation for 100 * 2.5 fs = 250 fs
     record_energy()
-
 traj.close()
 
 # After simulation, plot the histograms
@@ -157,7 +155,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load the trajectory
-trajectory_filename = 'argon_trajectory.traj'
+trajectory_filename = 'argon_trajectory_long.traj'
 traj = Trajectory(trajectory_filename)
 
 # List to store kinetic energies of each atom for all frames
