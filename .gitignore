@@ -164,5 +164,14 @@ logs/*.out
 logs/*.err
 
 # results and dataset path (reduce git overhead)
-results/*
-dataset/*
+results
+dataset
+wandb
+logs
+__pycache__
+*.wandb
+*.pt
+*.npy
+*.pyc
+*/__pycache__/
+.git

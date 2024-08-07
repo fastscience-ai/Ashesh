@@ -181,19 +181,19 @@ class Transformer(nn.Module):
        # print(x.shape)
         B, _, H, C = x.shape
         x = torch.reshape(torch.flatten(x), [B, -1])
-        print(x.shape)
+        # print(x.shape)
         x = self.input_emb(x)
         x = torch.reshape(x, [-1, self.dim, self.input_size, 1])
        # print("x,cond, t",x.shape,cond.shape, t.shape) #x,t torch.Size([100, 64, 9, 1]) torch.Size([100, 28])
         #print(x, t)
     
         B, N, H, C = x.shape #batch, n_atom, dim_atom, channel
-        print(x.shape)
+        # print(x.shape)
         x_emb = []
         for i in range(N):
           x_emb.append(self.patches(x[:,i,:,:].reshape([B, H*C])))  # [batch, dim_atom x channel] --> [batch,  emb_dim]
         x = torch.cat(x_emb, 1)
-        x = x.reshape([B, N, -1], print(x))
+        x = x.reshape([B, N, -1])# , print(x))
         #print(t.shape, x.shape, self.pos_embedding.shape)
         #torch.Size([100, 64]) torch.Size([100, 32, 64]) torch.Size([1, 32, 64])
         x += self.pos_embedding

@@ -54,33 +54,20 @@ posterior_variance = betas * (1. - alphas_cumprod_prev) / (1. - alphas_cumprod)
 psi_test_label_Tr = y_tensor_norm.detach().cpu().numpy()
 
 #model = SimpleUnet()
-model = Transformer(num_atoms=64, input_size=9, dim=64,
-                 depth=3, heads=4, mlp_dim=512, k=64, in_channels=1)
-'''
-class EGNN(nn.Module):
+# model = Transformer(num_atoms=64, input_size=9, dim=64,
+#                  depth=3, heads=4, mlp_dim=512, k=64, in_channels=1)
 
-    def __init__(self,
-            in_dim: int,
-            out_dim: int,
-            h_dim: int = 128,
-            num_layer: int = 6,
-            update_coord: bool = False,
-            use_tanh: bool = False,
-            use_pbc: bool = False,
-            use_rinv: bool = False,
-            use_attention: bool = False,
-            num_head: Optional[int] = 4,
-            layer_norm: str = 'pre') -> None:
-'''
 model = EGNN(in_dim=64,
-            out_dim=64,
+            out_dim=6, # force, vel output
             h_dim=128,
             num_layer=3,
+            num_timesteps=300,
             update_coord=True,
             use_attention=True,
             num_head=4)
 print("Num params: ", sum(p.numel() for p in model.parameters()))
 print(model)
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model.to(device)
 optimizer = Adam(model.parameters(), lr=learning_rate)
@@ -92,25 +79,24 @@ for epoch in range(0, num_epochs):  # loop over the dataset multiple times
     mean_loss = 0.0
     iter_cnt_per_epoch = 0
     for k in ["file_1"]:
-        print('File index',k)
         trainN=5000
-        
         
         for step in range(0,trainN-batch_size,batch_size):
             # get the inputs; data is a list of [inputs, labels]
             indices = np.random.permutation(np.arange(start=step, stop=step+batch_size))
             input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
-            print(input_batch.shape, label_batch.shape)
+            
             # zero the parameter gradients
             optimizer.zero_grad()
             t = torch.randint(0, T, (batch_size,), device=device).long()
-            loss = get_loss_cond(model, input_batch.float().cuda(), t, label_batch.float().cuda())
+            loss = get_loss_cond_egnn(model, input_batch.float().cuda(), t, label_batch.float().cuda())
             loss.backward()
             optimizer.step()
+
             wandb.log({'loss': loss}, step=iter_cnt_total)
             indices = np.random.permutation(np.arange(start=0, stop=1000))
             input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
-            val_loss = get_loss_cond(model, input_batch.float().cuda(), t, label_batch.float().cuda())
+            val_loss = get_loss_cond_egnn(model, input_batch.float().cuda(), t, label_batch.float().cuda())
             wandb.log({'val_loss': val_loss}, step=iter_cnt_total)
             wandb.log({'epoch': epoch}, step=iter_cnt_total)
 
@@ -126,7 +112,7 @@ for epoch in range(0, num_epochs):  # loop over the dataset multiple times
         print('Model saved')
 
 #Inference
-#Inference
+#Sample Nens trajectories, get the mean of the trajectories 
 T = 300
 Nens = 20
 Nsteps = 100 # number of experiments

@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import sys
-import netCDF4 as nc
+#import netCDF4 as nc
 from data_loader_one_step_UVS import load_test_data
 from data_loader_one_step_UVS import load_train_data
 from torch.optim import Adam
@@ -49,7 +49,7 @@ def RK4step(net,input_batch):
 def Eulerstep(net,input_batch):
     output_1 = net(input_batch.cuda())
     return input_batch.cuda() + delta_t*(output_1)
-
+ 
 def PECstep(net,input_batch):
     output_1 = net(input_batch.cuda()) + input_batch.cuda()
     return input_batch.cuda() + delta_t*0.5*(net(input_batch.cuda())+net(output_1))
@@ -67,6 +67,34 @@ def get_loss_cond(model, x_0, t, label_batch):  #???
     x_noisy, noise = forward_diffusion_sample(x_0, t, device)
     noise_pred = model(x_noisy, x_0, t)
     return  mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
+
+
+def get_loss_cond_egnn(model, x_0, t, label_batch):  #???
+    x_noisy, noise = forward_diffusion_sample(x_0, t, device)
+
+    print("x_noisy", x_noisy.shape)
+    print("x_0", x_0.shape)
+    print("t", t.shape)
+
+    x_0 = x_0.squeeze()
+    x_noisy = x_noisy.squeeze()
+
+    n_frames, n_atoms, n_features = x_0.shape
+    # input = noise + x_0
+    x_coord, x_force_speed = torch.split(x_noisy, [3, 6], dim=-1)
+    # distance mtx and masks
+    dist_mtx = calc_distance(x_coord)
+    mask = torch.ones((n_frames, n_atoms))
+    mask2d = dist_mtx < 0.9
+
+    feat_noise_pred, coord_noise_pred = model(x_force_speed, x_coord, t.view(-1, 1), 
+                                                adj_mat=mask2d, mask=mask, mask2d=mask2d)
+
+    noise_pred = torch.cat((coord_noise_pred, feat_noise_pred), dim=-1).unsqueeze(1)                
+
+    # noise_pred = model(x_noisy, x_0, t) # currently not implemented conditional diffusion (is it really conditional?)
+    return  mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
+
 
 @torch.no_grad()
 def sample_timestep(x, t):
@@ -104,7 +132,7 @@ def get_index_from_list(vals, t, x_shape):
     out = vals.gather(-1, t.cpu())
     return out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to(t.device)
 
-
+ 
 def forward_diffusion_sample(x_0, t, device="cuda"):
     """
     Takes an image and a timestep as input and
@@ -219,6 +247,7 @@ class SimpleUnet(nn.Module):
 
 def normalize_md(x):
     #x: [5000,64,9]
+    #x_out = np.zeros_like(x)
     d1,d2,d3 = np.shape(x)
     mean_list = [np.average(x[:,:,i]) for i in range(d3)]
     std_list = [np.std(x[:,:,i]) for i in range(d3)]
@@ -252,6 +281,18 @@ def denormalize_md_pred(x, mean_list, std_list):
                         x[ii, i,j,0,k,l] = x[ii,i,j,0,k,l]*std_list[l]+mean_list[l]
     return x
 
+
+def calc_distance(x:torch.Tensor):
+    n_frames, n_atoms, n_features = x.shape
+    assert n_features == 3,  "The last dimension should be 3"
+
+    dist_mtx = torch.zeros((n_frames, n_atoms, n_atoms))
+    x2 = torch.sum(torch.square(x), dim=-1)
+    y2 = torch.sum(torch.square(x), dim=-1)
+    xy = torch.matmul(x, x.transpose(-1, -2))
+    dist_mtx = torch.sqrt(torch.maximum(x2[:, :, None] + y2[:, None, :] - 2 * xy, torch.tensor(1e-6)))
+
+    return dist_mtx
 
 
 # Define beta schedule

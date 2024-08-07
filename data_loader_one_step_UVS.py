@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 #from torchinfo import summary
 import sys
-import netCDF4 as nc
+# import netCDF4 as nc
 #from saveNCfile import savenc
 
 
