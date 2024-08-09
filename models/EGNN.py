@@ -272,7 +272,6 @@ class TimestepEncoding(nn.Module):
 
         sin = torch.sin(((t / self.num_timestep) + self.freq_bands) * 0.5 * math.pi).unsqueeze(1)
         cos = torch.cos(((t / self.num_timestep) + self.freq_bands) * 0.5 * math.pi).unsqueeze(1)
-        print("emebedding",sin.shape, cos.shape)
 
         out[..., :sin.size(-1)] = sin
         out[..., sin.size(-1):] = cos
@@ -295,6 +294,7 @@ class EGNN(nn.Module):
             use_rinv: bool = False,
             use_attention: bool = False,
             num_head: Optional[int] = 4,
+            use_condition: bool = False,
             layer_norm: str = 'pre') -> None:
 
         super(EGNN, self).__init__()
@@ -308,13 +308,15 @@ class EGNN(nn.Module):
         self.use_pbc = use_pbc
         self.use_rinv = use_rinv
         self.use_attention = use_attention
+        self.use_condition = use_condition
 
         self.layer = list()
         self.emb = nn.Linear(in_dim, h_dim) # Not using this for now
         self.atomic_emb = nn.Linear(100, h_dim) # Not using this for now
         # encoding layers
         self.time_enc = TimestepEncoding(h_dim, num_timesteps)
-        self.feat_enc = nn.Linear(6, h_dim) # encoding [force, velocity]
+        self.enc_dim = 15 if use_condition else 6
+        self.feat_enc = nn.Linear(self.enc_dim, h_dim) # encoding [force, velocity, condition(optional)]
         self.combine = nn.Linear(2*h_dim, h_dim)
 
         for idx in range(num_layer):
@@ -352,6 +354,7 @@ class EGNN(nn.Module):
         adj_mat: torch.Tensor,
         mask: torch.Tensor,
         mask2d: torch.Tensor,
+        condition: Optional[torch.Tensor] = None,
         lattice: Optional[torch.Tensor] = None,) -> Tuple[torch.Tensor, torch.Tensor]:
 
         # atom_feat: (batch, num_atom, 6) [force, velocity], originally h_dim
@@ -376,9 +379,11 @@ class EGNN(nn.Module):
 
             radial = 1 / (radial + 0.3)
 
+        if self.use_condition:
+                atom_feat = torch.cat([atom_feat, condition], dim = -1)
         atom_feat = self.feat_enc(atom_feat)
         t_feat = self.time_enc(atom_feat, t)
-        print("feat, t : ",atom_feat.shape, t_feat.shape)
+
         feat = torch.empty(atom_feat.size(0), atom_feat.size(1), self.h_dim * 2).to(atom_feat)
         # combine atom_feat and t_feat
         feat[:, :, :self.h_dim] = atom_feat

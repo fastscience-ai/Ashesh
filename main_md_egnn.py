@@ -16,7 +16,7 @@ result_path = "results"
 
 save_interval = 10 # how often to save the model
 num_epochs = 5000
-learning_rate = 1e-3 # 0.00001
+learning_rate = 3e-4 # 0.00001
 
 #data load
 #(50000, 64, 9)
@@ -37,8 +37,8 @@ y_tensor_norm, mean_list_y, std_list_y = normalize_md(y_tensor)
 y_tensor_norm=np.reshape(y_tensor_norm, [d1,1,d2,d3]) 
 y_tensor_norm=torch.from_numpy(y_tensor_norm)
 
-tr_x, te_x =  x_tensor_norm[:-1000], x_tensor_norm[-1000:]
-tr_y, te_y =  y_tensor_norm[:-1000], y_tensor_norm[-1000:]
+tr_x, te_x =  x_tensor_norm[:-batch_size*2], x_tensor_norm[-batch_size*2:]
+tr_y, te_y =  y_tensor_norm[:-batch_size*2], y_tensor_norm[-batch_size*2:]
 print(tr_x.shape, tr_y.shape, te_x.shape, te_y.shape) #[batch_size, channel, n_atom, atom_feature_size]
 # Define beta schedule
 T = 300
@@ -64,7 +64,8 @@ model = EGNN(in_dim=64,
             num_timesteps=300,
             update_coord=True,
             use_attention=True,
-            num_head=4)
+            num_head=4,
+            use_condition=True,)
 print("Num params: ", sum(p.numel() for p in model.parameters()))
 print(model)
 
@@ -94,7 +95,7 @@ for epoch in range(0, num_epochs):  # loop over the dataset multiple times
             optimizer.step()
 
             wandb.log({'loss': loss}, step=iter_cnt_total)
-            indices = np.random.permutation(np.arange(start=0, stop=1000))
+            indices = np.random.permutation(np.arange(start=0, stop=batch_size))
             input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
             val_loss = get_loss_cond_egnn(model, input_batch.float().cuda(), t, label_batch.float().cuda())
             wandb.log({'val_loss': val_loss}, step=iter_cnt_total)

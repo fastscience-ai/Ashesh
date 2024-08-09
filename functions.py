@@ -17,7 +17,7 @@ path_outputs = "./outputs/"
 lead = 1
 delta_t =0.01
 
-batch_size = 1000
+batch_size = 256
 lamda_reg =0.2
 wavenum_init=0 #10
 wavenum_init_ydir=0 #10
@@ -72,25 +72,29 @@ def get_loss_cond(model, x_0, t, label_batch):  #???
 def get_loss_cond_egnn(model, x_0, t, label_batch):  #???
     x_noisy, noise = forward_diffusion_sample(x_0, t, device)
 
-    print("x_noisy", x_noisy.shape)
-    print("x_0", x_0.shape)
-    print("t", t.shape)
+    # print("x_noisy", x_noisy.shape)
+    # print("x_0", x_0.shape)
+    # print("t", t.shape)
 
-    x_0 = x_0.squeeze()
-    x_noisy = x_noisy.squeeze()
+    x_0 = x_0.squeeze().to(t.device)
+    x_noisy = x_noisy.squeeze().to(t.device)
 
     n_frames, n_atoms, n_features = x_0.shape
     # input = noise + x_0
     x_coord, x_force_speed = torch.split(x_noisy, [3, 6], dim=-1)
     # distance mtx and masks
-    dist_mtx = calc_distance(x_coord)
-    mask = torch.ones((n_frames, n_atoms))
+    dist_mtx = calc_distance(x_coord).to(t.device)
+    mask = torch.ones((n_frames, n_atoms)).to(t.device)
     mask2d = dist_mtx < 0.9
 
     feat_noise_pred, coord_noise_pred = model(x_force_speed, x_coord, t.view(-1, 1), 
-                                                adj_mat=mask2d, mask=mask, mask2d=mask2d)
+                                                adj_mat=mask2d, mask=mask, mask2d=mask2d, condition=x_0)
 
-    noise_pred = torch.cat((coord_noise_pred, feat_noise_pred), dim=-1).unsqueeze(1)                
+    noise_pred = torch.cat((coord_noise_pred, feat_noise_pred), dim=-1).unsqueeze(1)     
+    x_noisy = x_noisy.unsqueeze(1)   
+    # print("noise_pred", noise_pred.shape)
+    # print("label_batch", label_batch.shape)   
+    # print("x_noisy", x_noisy.shape)     
 
     # noise_pred = model(x_noisy, x_0, t) # currently not implemented conditional diffusion (is it really conditional?)
     return  mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
