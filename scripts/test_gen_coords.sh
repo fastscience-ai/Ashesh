@@ -20,6 +20,6 @@ cd $WORKSPACE_PATH
 
 echo "START"
 
-srun python $WORKSPACE_PATH/main_md_egnn.py 
+srun python $WORKSPACE_PATH/main_md_egnn.py --exp_name egnn_test_traj_lr_3e-4
 
 echo "DONE"
