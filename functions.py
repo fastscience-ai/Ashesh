@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-print(torch.__version__)
+print("pytorch verison =", torch.__version__)
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -69,12 +69,8 @@ def get_loss_cond(model, x_0, t, label_batch):  #???
     return  mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
 
 
-def get_loss_cond_egnn(model, x_0, t, label_batch):  #???
+def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False):  #???
     x_noisy, noise = forward_diffusion_sample(x_0, t, device)
-
-    # print("x_noisy", x_noisy.shape)
-    # print("x_0", x_0.shape)
-    # print("t", t.shape)
 
     x_0 = x_0.squeeze().to(t.device)
     x_noisy = x_noisy.squeeze().to(t.device)
@@ -86,18 +82,39 @@ def get_loss_cond_egnn(model, x_0, t, label_batch):  #???
     dist_mtx = calc_distance(x_coord).to(t.device)
     mask = torch.ones((n_frames, n_atoms)).to(t.device)
     mask2d = dist_mtx < 0.9
-
+    # currently [x_noisy, x_0] are passed to atom_feat in the model
     feat_noise_pred, coord_noise_pred = model(x_force_speed, x_coord, t.view(-1, 1), 
                                                 adj_mat=mask2d, mask=mask, mask2d=mask2d, condition=x_0)
 
-    noise_pred = torch.cat((coord_noise_pred, feat_noise_pred), dim=-1).unsqueeze(1)     
+    noise_pred = feat_noise_pred.unsqueeze(1)
+    #noise_pred = torch.cat((coord_noise_pred, feat_noise_pred), dim=-1).unsqueeze(1)     
     x_noisy = x_noisy.unsqueeze(1)   
-    # print("noise_pred", noise_pred.shape)
-    # print("label_batch", label_batch.shape)   
-    # print("x_noisy", x_noisy.shape)     
+
+    if is_gen_step:
+        return x_noisy
 
     # noise_pred = model(x_noisy, x_0, t) # currently not implemented conditional diffusion (is it really conditional?)
     return  mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
+
+
+def sample_from_egnn(model, x_noisy, cond, t):
+    # squeeze tensors before pass to the model
+    x_noisy = x_noisy.squeeze(1)
+    cond = cond.squeeze(1)
+    
+    n_frames, n_atoms, n_features = x_noisy.shape
+    x_coord, x_force_speed = torch.split(x_noisy, [3, 6], dim=-1)
+    dist_mtx = calc_distance(x_coord).to(t.device)
+    mask = torch.ones((n_frames, n_atoms)).to(t.device)
+    mask2d = dist_mtx < 0.9
+
+    feat_noise_pred, coord_noise_pred = model(x_force_speed, x_coord, t.view(-1, 1), 
+                                                adj_mat=mask2d, mask=mask, mask2d=mask2d, condition=cond)
+
+    noise_pred = feat_noise_pred.unsqueeze(1)
+    
+    return x_noisy - noise_pred
+
 
 
 @torch.no_grad()
