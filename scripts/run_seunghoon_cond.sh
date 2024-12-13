@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J sh_test_md_egnn_cond
+#SBATCH -J sh_test_md_egnn_500k
 #SBATCH -p cas_v100nv_8
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -20,6 +20,6 @@ cd $WORKSPACE_PATH
 
 echo "START"
 
-srun python $WORKSPACE_PATH/main_md_egnn.py --gpu-list 0
+srun python $WORKSPACE_PATH/main_md_egnn.py --temperature 500
 
 echo "DONE"

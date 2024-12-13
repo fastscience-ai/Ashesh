@@ -175,3 +175,4 @@ __pycache__
 *.pyc
 */__pycache__/
 .git
+*.traj

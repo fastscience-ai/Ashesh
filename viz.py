@@ -3,7 +3,7 @@ import numpy as np
 
 
 # unconditional diffusion model
-uncond=np.load('./results/predicted_diffusion_md_uncond.npz')
+uncond=np.load('./results/egnn_3layer_traj_lr_3e-4.npz')
 uncond_pre = uncond['arr_0']
 uncond_gt = uncond['arr_1']
 uncond_pre_ave = np.mean(uncond_pre, 2)

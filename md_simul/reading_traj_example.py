@@ -15,7 +15,8 @@ import numpy as np
 import ase
 import ase.io
 # Input
-trajectory_filename = 'argon_trajectory_long.traj'
+trajectory_filename = 'argon_trajectory_long_1000.0.traj'
+temperature = '1000K'
 
 # %%
 ase_traj = ase.io.read(trajectory_filename, index=':')
@@ -58,8 +59,8 @@ ii = np.shape(out[1:])
 print(ii)
 output_ = np.reshape(out[1:,:,:], (int(ii[0]/time_length),(time_length),ii[1],ii[2]))
 print(np.shape(input_), np.shape(output_))
-np.save("input_long.npy", input_)
-np.save("output_long.npy", output_)
+np.save(f"input_long_{temperature}.npy", input_)
+np.save(f"output_long.npy_{temperature}", output_)
 print(np.shape(output_), np.shape(input_))
    # print("Postion\n",ase_traj[i].positions)
    # print("Force\n", ase_traj[i].get_forces)

@@ -94,7 +94,9 @@ def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False):  #???
         return x_noisy
 
     # noise_pred = model(x_noisy, x_0, t) # currently not implemented conditional diffusion (is it really conditional?)
-    return  mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
+    # (x_0+noise-noise_pred) - x_0 = x_1 - x_0
+    # mse((x_1-x_0), (noise-noise_pred))
+    return  mse_loss((x_noisy-label_batch), noise_pred, wavenum_init, lamda_reg)
 
 
 def sample_from_egnn(model, x_noisy, cond, t):

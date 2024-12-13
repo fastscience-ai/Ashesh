@@ -115,9 +115,8 @@ class EGCL(nn.Module):
                 C = 1
 
         update = C * torch.sum(update * mask2d.unsqueeze(-1), dim = 2) # (batch, num_atom, 3)
-        new_coord = coord + update
 
-        return new_coord
+        return update
 
     def compute_feat(self,
             feat: torch.Tensor,
@@ -227,7 +226,7 @@ class EAL(nn.Module):
         mask2d = mask2d.unsqueeze(1).expand(num_batch, self.num_head, num_atom, num_atom)
 
         attn = torch.einsum('bhnd,bhmd->bhnm', q, k) * self.scale # (batch, head, num_atom, num_atom)
-        attn = attn.masked_fill(~mask2d, -1e6)
+        attn = attn.masked_fill(~mask2d, torch.finfo(attn.dtype).min)
         attn = attn.softmax(dim = -1)
 
         out = torch.einsum('bhnm,bhmd->bhnd', attn, v)
@@ -288,7 +287,7 @@ class EGNN(nn.Module):
             h_dim: int = 128,
             num_layer: int = 6,
             num_timesteps: int = 300,
-            update_coord: bool = False,
+            update_coord: str = 'last',
             use_tanh: bool = False,
             use_pbc: bool = False,
             use_rinv: bool = False,
@@ -364,7 +363,7 @@ class EGNN(nn.Module):
         # adj_mat: (batch, num_atom, num_atom)
         # lattice: (batch, 3, 3)
 
-        new_coord = coord
+        new_coord = 0
         disp = coord.unsqueeze(2) - coord.unsqueeze(1) # (batch, num_atom, num_atom, 3)
         radial = torch.sum(disp ** 2, dim = -1, keepdim = True) # (batch, num_atom, num_atom, 1)
 
@@ -393,15 +392,24 @@ class EGNN(nn.Module):
 
         for idx in range(self.num_layer):
 
-            feat, _new_coord = self.layer[idx](feat, coord, radial, adj_mat, mask, mask2d)
+            feat, coord_update = self.layer[idx](feat, coord, radial, adj_mat, mask, mask2d)
+            new_coord = new_coord + coord_update
 
-        new_feat = self.dec(feat)
+        match self.update_coord:
 
-        if self.update_coord:
+            case 'all':
 
-            new_coord = _new_coord
+                pass
 
-        new_feat = new_feat * mask.unsqueeze(-1)
+            case 'last':
+
+                new_coord = coord + coord_update
+
+            case 'none':
+
+                new_coord = coord
+
+        new_feat = self.dec(feat) * mask.unsqueeze(-1)
         new_coord = new_coord * mask.unsqueeze(-1)
 
         return new_feat, new_coord

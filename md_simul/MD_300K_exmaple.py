@@ -17,7 +17,7 @@
 
 # %%
 # Input
-temperature_K = 300.0
+temperature_K = 1000.0
 supercell_size = (4,4,4)
 num_steps = 10
 print("Running MD simulation at", temperature_K, "K")
@@ -99,7 +99,7 @@ atoms.set_momenta(atoms.get_momenta() - atoms.get_momenta().mean(axis=0))
 dyn = VelocityVerlet(atoms, 2.5 * units.fs)  # Time step is 2.5 fs
 
 # Setup the trajectory writer
-trajectory_filename = 'argon_trajectory_long.traj'
+trajectory_filename = f'argon_trajectory_long_{temperature_K}.traj'
 traj = Trajectory(trajectory_filename, 'w', atoms)
 
 # Attach the trajectory to the dynamics
