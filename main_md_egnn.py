@@ -85,7 +85,8 @@ model = EGNN(in_dim=64,
             update_coord='last',
             use_attention=True,
             num_head=4,
-            use_condition=True,)
+            use_condition=True,
+            temperature=args.temperature,)
 print("Num params: ", sum(p.numel() for p in model.parameters()))
 print(model)
 

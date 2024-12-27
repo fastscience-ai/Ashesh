@@ -89,13 +89,16 @@ class EGCL(nn.Module):
     def compute_coord(self,
             message: torch.Tensor,
             coord: torch.Tensor,
-            mask2d: torch.Tensor) -> torch.Tensor:
+            radial: torch.Tensor,
+            disp: torch.Tensor,
+            mask2d: torch.Tensor,
+            ) -> torch.Tensor:
 
         # equation 4 in the EGNN paper
         # C = 1 / (M - 1) where M is # of atoms in the molecule
         # However, the original implmentation code uses C = 1
-
-        disp = coord.unsqueeze(2) - coord.unsqueeze(1) # (batch, num_atom, num_atom, 3)
+        if disp is None:
+            disp = coord.unsqueeze(2) - coord.unsqueeze(1) # (batch, num_atom, num_atom, 3)
 
         match self.implementation:
 
@@ -152,6 +155,7 @@ class EGCL(nn.Module):
             feat: torch.Tensor,
             coord: torch.Tensor,
             radial: torch.Tensor,
+            disp: torch.Tensor,
             adj_mat: torch.Tensor,
             mask: torch.Tensor,
             mask2d: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -164,7 +168,7 @@ class EGCL(nn.Module):
         # mask2d: (batch, num_atom, num_atom)
 
         message = self.compute_message(feat, radial)
-        new_coord = self.compute_coord(message, coord, mask2d)
+        new_coord = self.compute_coord(message, coord, radial, disp, mask2d)
         new_feat = self.compute_feat(feat, message, adj_mat, mask2d)
 
         new_feat = new_feat * mask.unsqueeze(-1)
@@ -198,9 +202,10 @@ class EAL(nn.Module):
         self.layer_norm = nn.LayerNorm(h_dim)
 
     def forward(self, 
-            feat: torch.Tensor, 
+            feat: torch.Tensor,
             coord: torch.Tensor,
             radial: torch.Tensor,
+            disp: torch.Tensor,
             adj_mat: torch.Tensor, 
             mask: torch.Tensor,
             mask2d: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -287,10 +292,11 @@ class EGNN(nn.Module):
             h_dim: int = 128,
             num_layer: int = 6,
             num_timesteps: int = 300,
+            temperature: float = 300.0,
             update_coord: str = 'last',
             use_tanh: bool = False,
             use_pbc: bool = False,
-            use_rinv: bool = False,
+            use_rinv: bool = True,
             use_attention: bool = False,
             num_head: Optional[int] = 4,
             use_condition: bool = False,
@@ -314,7 +320,7 @@ class EGNN(nn.Module):
         self.atomic_emb = nn.Linear(100, h_dim) # Not using this for now
         # encoding layers
         self.time_enc = TimestepEncoding(h_dim, num_timesteps)
-        self.enc_dim = 18 if use_condition else 9
+        self.enc_dim = 12 if use_condition else 9
         self.feat_enc = nn.Linear(self.enc_dim, h_dim) # encoding [force, velocity, condition(optional)]
         self.combine = nn.Linear(2*h_dim, h_dim)
 
@@ -350,6 +356,7 @@ class EGNN(nn.Module):
         atom_feat: torch.Tensor,
         coord: torch.Tensor,
         radial: torch.Tensor,
+        disp: torch.Tensor,
         t: torch.Tensor,
         adj_mat: torch.Tensor,
         mask: torch.Tensor,
@@ -365,8 +372,10 @@ class EGNN(nn.Module):
         # lattice: (batch, 3, 3)
 
         new_coord = 0
-        disp = coord.unsqueeze(2) - coord.unsqueeze(1) # (batch, num_atom, num_atom, 3)
-        radial = radial.unsqueeze(-1) #torch.sum(disp ** 2, dim = -1, keepdim = True) # (batch, num_atom, num_atom, 1)
+        if radial is None:
+            disp = coord.unsqueeze(2) - coord.unsqueeze(1) # (batch, num_atom, num_atom, 3)
+        disp = disp.squeeze()           # (batch, num_atom, num_atom, 3)
+        radial = radial.unsqueeze(-1)   # torch.sum(disp ** 2, dim = -1, keepdim = True) # (batch, num_atom, num_atom, 1)
         #print('radial', radial.size())
 
         # if self.use_pbc:
@@ -376,12 +385,12 @@ class EGNN(nn.Module):
         #     frac_disp_pbc = frac_disp - torch.round(frac_disp)
         #     disp = torch.einsum('bijk,bkl->bijl', frac_disp_pbc, lattice)
 
-        # if self.use_rinv:
+        if self.use_rinv:
 
-        #     radial = 1 / (radial + 0.3)
+            radial = 1 / (radial + 0.3)
 
         if self.use_condition:
-                atom_feat = torch.cat([coord, atom_feat, condition], dim = -1) # (batch, num_atom, 18)
+                atom_feat = torch.cat([atom_feat, condition[:, :, 3:]], dim = -1) # (batch, num_atom, 18)
         atom_feat = self.feat_enc(atom_feat)
         t_feat = self.time_enc(atom_feat, t)
 
@@ -394,22 +403,22 @@ class EGNN(nn.Module):
 
         for idx in range(self.num_layer):
 
-            feat, coord_update = self.layer[idx](feat, coord, radial, adj_mat, mask, mask2d)
+            feat, coord_update = self.layer[idx](feat, coord, radial, disp, adj_mat, mask, mask2d)
             new_coord = new_coord + coord_update
 
-        match self.update_coord:
+        # match self.update_coord:
 
-            case 'all':
+        #     case 'all':
 
-                pass
+        #         pass
 
-            case 'last':
+        #     case 'last':
 
-                new_coord = coord + coord_update
+        #         new_coord = coord + coord_update
 
-            case 'none':
+        #     case 'none':
 
-                new_coord = coord
+        #         new_coord = coord
 
         new_feat = self.dec(feat) * mask.unsqueeze(-1)
         new_coord = new_coord * mask.unsqueeze(-1)

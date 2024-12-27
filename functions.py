@@ -73,7 +73,7 @@ def get_loss_cond(model, x_0, t, label_batch):  #???
     return  mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
 
 
-def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff = 0.9):  #???
+def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff = 3):  #???
     x_noisy, noise = forward_diffusion_sample(x_0, t, device)
 
     x_0 = x_0.squeeze().to(t.device)
@@ -85,11 +85,11 @@ def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff =
     # distance mtx and masks
     # dist_mtx = calc_distance(x_coord).to(t.device)
     #print('x_coord shape: ', x_coord.shape)
-    dist_mtx, min_idx = compute_min_distance_pbc_single_cell(x_coord, x_coord, cell_vector, cell_vector, cutoff)
+    dist_mtx, disp_mtx, min_idx = compute_min_distance_pbc_single_cell(x_coord, x_coord, cell_vector, cell_vector, cutoff)
     mask = torch.ones((n_frames, n_atoms)).to(t.device)
-    mask2d = dist_mtx < 0.9
+    mask2d = dist_mtx < cutoff
     # currently [x_noisy, x_0] are passed to atom_feat in the model
-    feat_noise_pred, coord_noise_pred = model(x_force_speed, x_coord, dist_mtx, t.view(-1, 1), 
+    feat_noise_pred, coord_noise_pred = model(x_force_speed, x_coord, dist_mtx, disp_mtx, t.view(-1, 1), 
                                                 adj_mat=mask2d, mask=mask, mask2d=mask2d, condition=x_0)
 
     noise_pred = feat_noise_pred.unsqueeze(1)
@@ -105,7 +105,7 @@ def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff =
     return  mse_loss((x_noisy-label_batch), noise_pred, wavenum_init, lamda_reg)
 
 
-def sample_from_egnn(model, x_noisy, cond, t, cutoff = 0.9):
+def sample_from_egnn(model, x_noisy, cond, t, cutoff = 3):
     # squeeze tensors before pass to the model
     x_noisy = x_noisy.squeeze(1)
     cond = cond.squeeze(1)
@@ -113,16 +113,34 @@ def sample_from_egnn(model, x_noisy, cond, t, cutoff = 0.9):
     n_frames, n_atoms, n_features = x_noisy.shape
     x_coord, x_force_speed = torch.split(x_noisy, [3, 6], dim=-1)
     #dist_mtx = calc_distance(x_coord).to(t.device)
-    dist_mtx, min_idx = compute_min_distance_pbc_single_cell(x_coord, x_coord, cell_vector, cell_vector, cutoff)
+    dist_mtx, disp_mtx, min_idx = compute_min_distance_pbc_single_cell(x_coord, x_coord, cell_vector, cell_vector, cutoff)
     mask = torch.ones((n_frames, n_atoms)).to(t.device)
-    mask2d = dist_mtx < 0.9
+    mask2d = dist_mtx < cutoff
 
-    feat_noise_pred, coord_noise_pred = model(x_force_speed, x_coord, dist_mtx, t.view(-1, 1), 
+    feat_noise_pred, coord_noise_pred = model(x_force_speed, x_coord, dist_mtx, disp_mtx, t.view(-1, 1), 
                                                 adj_mat=mask2d, mask=mask, mask2d=mask2d, condition=cond)
 
     noise_pred = feat_noise_pred.unsqueeze(1)
     
     return x_noisy - noise_pred
+
+
+def pbc_coord(coord: torch.Tensor, lattice: torch.Tensor) -> torch.Tensor:
+    """
+    Apply periodic boundary condition to the coordinates.
+    Args:
+        coord (torch.Tensor): The coordinates to apply PBC to. The shape is (batch_size, num_atoms, 3).
+        lattice (torch.Tensor): The lattice vectors. The shape is (batch_size, 3, 3).
+    Returns:
+        torch.Tensor: The coordinates after applying PBC. The shape is (batch_size, num_atoms, 3).
+    """
+    # Calculate the fractional coordinates
+    fractional_coord = torch.einsum('bji,bni->bnj', torch.inverse(lattice), coord)
+    # Apply PBC
+    fractional_coord = fractional_coord - torch.floor(fractional_coord)
+    # Convert back to Cartesian coordinates
+    coord = torch.einsum('bji,bnj->bni', lattice, fractional_coord)
+    return coord
 
 
 def compute_min_distance_pbc_single_cell(
@@ -139,19 +157,17 @@ def compute_min_distance_pbc_single_cell(
     if lattice1 is None and lattice2 is None:
         return comput_disp(coord1, coord2, mask, cutoff, eps)
 
+
+    coord1 = pbc_coord(coord1, lattice1)
+    coord2 = pbc_coord(coord2, lattice2)
+
     batch_size, num_atoms, _ = coord1.shape
     # Normalize the coord (move into the unit cell)
-    #print('coord before pbc_coord: ', coord)
-    #coord = pbc_coord(coord, lattice)
-    #print('coord after pbc_coord: ', coord)
     # if self.max_neighbor is not None:
     # Step 1: Generate relative cell displacement vectors
     # num_image_cell:1 -> (3x3x3) shift vectors
     # num_image_cell:3 -> (7x7x7) shift vectors
-    # n_img == num_image_cell**3
-    # print("lattice and coord shape : ", lattice1.shape, coord1.shape)
 
-    # step 1: Generate relative cell displacement vectors
     shifts = torch.stack(torch.meshgrid(
         torch.arange(-num_image_cell, num_image_cell + 1),  # Neighbor cells in x
         torch.arange(-num_image_cell, num_image_cell + 1),  # Neighbor cells in y
@@ -173,14 +189,17 @@ def compute_min_distance_pbc_single_cell(
     disp_1 = coord1_ext.unsqueeze(2) - coord1.unsqueeze(1).unsqueeze(3)
     coord2_ext = coord2.unsqueeze(2) + r_vector_2.unsqueeze(1)  # (batch_size, num_atoms, n_img, 3)
     disp_2 = coord2_ext.unsqueeze(2) - coord2.unsqueeze(1).unsqueeze(3)
-    # print("coord2_ext shape: ", coord2_ext.shape)
+    
     
     self_min_disp = torch.sqrt(torch.sum(disp_1 ** 2, dim=-1))  # (batch_size, num_atoms, num_atoms, n_img)
     
+    #print("self min disp shape: ", self_min_disp.shape)
+
     min_dist, min_idx = torch.min(self_min_disp, dim=-1)  # (batch_size, num_atoms, num_atoms)
+    min_disp = torch.gather(disp_1, 3,  min_idx.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, -1, 1, 3))
     
     #return disp
-    return min_dist, min_idx
+    return min_dist, min_disp, min_idx
 
 
 
