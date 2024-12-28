@@ -24,7 +24,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Initialize wandb
 wandb.init(project='diffusionMD')
-exp_name = f'egnn_3lr_3e-4_t250_{args.temperature}K_ pbc'
+exp_name = f'egnn_3lr_1e-4_t250_{args.temperature}K_ pbc_fixed'
 wandb.run.name = exp_name
 
 # options for the model and training
@@ -32,8 +32,8 @@ dataset_path = "./dataset"
 result_path = "./results"
 
 save_interval = 10 # how often to save the model
-num_epochs = 11
-learning_rate = 3e-4 # 0.00001
+num_epochs = 31
+learning_rate = 1e-4 # 0.00001
 
 #data load
 #(50000, 64, 9)

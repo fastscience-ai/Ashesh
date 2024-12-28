@@ -19,7 +19,7 @@ path_outputs = "./outputs/"
 lead = 1
 delta_t =0.01
 
-batch_size = 256
+batch_size = 128
 lamda_reg =0.2
 wavenum_init=0 #10
 wavenum_init_ydir=0 #10
@@ -74,17 +74,28 @@ def get_loss_cond(model, x_0, t, label_batch):  #???
 
 
 def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff = 3):  #???
-    x_noisy, noise = forward_diffusion_sample(x_0, t, device)
-
+    # capply pbc on ondition and targets 
+    #print('x_0 shape: ', x_0.shape)
     x_0 = x_0.squeeze().to(t.device)
+    label_batch = label_batch.squeeze().to(t.device)
+    # print('x_0 shape: ', x_0.shape)
+    # print('label_batch shape: ', label_batch.shape)
+
+    x_0[:, :, :3] = pbc_coord(x_0[:, :, :3], cell_vector)
+    label_batch[:, :, :3] = pbc_coord(label_batch[:, :, :3], cell_vector)
+    x_noisy, noise = forward_diffusion_sample(x_0, t, device)
     x_noisy = x_noisy.squeeze().to(t.device)
+    noise = noise.squeeze().to(t.device)
+    # print('x_noisy shape: ', x_noisy.shape)
+    # print('noise shape: ', noise.shape)
 
     n_frames, n_atoms, n_features = x_0.shape
     # input = noise + x_0
     x_coord, x_force_speed = torch.split(x_noisy, [3, 6], dim=-1)
+
     # distance mtx and masks
     # dist_mtx = calc_distance(x_coord).to(t.device)
-    #print('x_coord shape: ', x_coord.shape)
+    print('x_coord shape: ', x_coord.shape)
     dist_mtx, disp_mtx, min_idx = compute_min_distance_pbc_single_cell(x_coord, x_coord, cell_vector, cell_vector, cutoff)
     mask = torch.ones((n_frames, n_atoms)).to(t.device)
     mask2d = dist_mtx < cutoff
@@ -93,22 +104,25 @@ def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff =
                                                 adj_mat=mask2d, mask=mask, mask2d=mask2d, condition=x_0)
 
     noise_pred = feat_noise_pred.unsqueeze(1)
+    label_batch = label_batch.unsqueeze(1)
     #noise_pred = torch.cat((coord_noise_pred, feat_noise_pred), dim=-1).unsqueeze(1)     
     x_noisy = x_noisy.unsqueeze(1)   
 
     if is_gen_step:
         return x_noisy
 
-    # noise_pred = model(x_noisy, x_0, t) # currently not implemented conditional diffusion (is it really conditional?)
     # (x_0+noise-noise_pred) - x_0 = x_1 - x_0
     # mse((x_1-x_0), (noise-noise_pred))
+
     return  mse_loss((x_noisy-label_batch), noise_pred, wavenum_init, lamda_reg)
 
 
 def sample_from_egnn(model, x_noisy, cond, t, cutoff = 3):
     # squeeze tensors before pass to the model
+
     x_noisy = x_noisy.squeeze(1)
     cond = cond.squeeze(1)
+    cond[:, :, :3] = pbc_coord(cond[:, :, :3], cell_vector)
     
     n_frames, n_atoms, n_features = x_noisy.shape
     x_coord, x_force_speed = torch.split(x_noisy, [3, 6], dim=-1)
@@ -121,6 +135,7 @@ def sample_from_egnn(model, x_noisy, cond, t, cutoff = 3):
                                                 adj_mat=mask2d, mask=mask, mask2d=mask2d, condition=cond)
 
     noise_pred = feat_noise_pred.unsqueeze(1)
+    x_noisy = x_noisy.unsqueeze(1)
     
     return x_noisy - noise_pred
 
@@ -245,11 +260,16 @@ def forward_diffusion_sample(x_0, t, device="cuda"):
     Takes an image and a timestep as input and
     returns the noisy version of it
     """
+    x_0 = x_0.squeeze()
+    x_0[:, :, :3] = pbc_coord(x_0[:, :, :3], cell_vector)
     noise = torch.randn_like(x_0)
     sqrt_alphas_cumprod_t = get_index_from_list(sqrt_alphas_cumprod, t, x_0.shape)
     sqrt_one_minus_alphas_cumprod_t = get_index_from_list(
         sqrt_one_minus_alphas_cumprod, t, x_0.shape
     )
+    # x_0 = x_0.unsqueeze(1)
+    # noise = noise.unsqueeze(1)  
+
     # mean + variance
     return sqrt_alphas_cumprod_t.to(device) * x_0.to(device) \
     + sqrt_one_minus_alphas_cumprod_t.to(device) * noise.to(device), noise.to(device)

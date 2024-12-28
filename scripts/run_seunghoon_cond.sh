@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J argon_md_egnn_200K_pbc
+#SBATCH -J argon_md_egnn_200K_pbc_fixed
 #SBATCH -p amd_a100nv_8
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
