@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH -J argon_md_egnn_200K_pbc_fixed
-#SBATCH -p amd_a100nv_8
+#SBATCH -p eme_h200nv_8
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
-#SBATCH --time 47:30:00
+#SBATCH --time 11:30:00
 #SBATCH --comment pytorch
 #SBATCH -o /scratch/x2895a03/research/md-diffusion/Ashesh/logs/output_%x_%j.out
 #SBATCH -e /scratch/x2895a03/research/md-diffusion/Ashesh/logs/output_%x_%j.err
@@ -20,6 +20,6 @@ cd $WORKSPACE_PATH
 
 echo "START"
 
-srun python $WORKSPACE_PATH/main_md_egnn.py --temperature 200
+srun python $WORKSPACE_PATH/main_md_egnn.py --temperature 300
 
 echo "DONE"

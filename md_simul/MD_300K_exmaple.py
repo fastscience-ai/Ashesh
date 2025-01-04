@@ -17,9 +17,10 @@
 
 # %%
 # Input
-temperature_K = 200.0
+temperature_K = 300.0
 supercell_size = (4,4,4)
-num_steps = 10
+num_steps = 10000
+num_frames_per_step = 10
 print("Running MD simulation at", temperature_K, "K")
 
 
@@ -118,7 +119,7 @@ def record_energy(a=atoms):
 
 # Now perform the simulation and record energies
 for step in tqdm(range(num_steps)):  # Number of steps
-    dyn.run(10000)  # Run simulation for 100 * 2.5 fs = 250 fs
+    dyn.run(num_frames_per_step)  # Run simulation for 100 * 2.5 fs = 250 fs
     atoms.wrap()
     record_energy()
 traj.close()

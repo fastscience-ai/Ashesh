@@ -97,8 +97,8 @@ class EGCL(nn.Module):
         # equation 4 in the EGNN paper
         # C = 1 / (M - 1) where M is # of atoms in the molecule
         # However, the original implmentation code uses C = 1
-        if disp is None:
-            disp = coord.unsqueeze(2) - coord.unsqueeze(1) # (batch, num_atom, num_atom, 3)
+        # if disp is None:
+        #     disp = coord.unsqueeze(2) - coord.unsqueeze(1) # (batch, num_atom, num_atom, 3)
 
         match self.implementation:
 
@@ -245,7 +245,7 @@ class EAL(nn.Module):
 
         out = out * mask.unsqueeze(-1)
 
-        return out, coord
+        return out, 0.
 
 
 
@@ -404,7 +404,8 @@ class EGNN(nn.Module):
         for idx in range(self.num_layer):
 
             feat, coord_update = self.layer[idx](feat, coord, radial, disp, adj_mat, mask, mask2d)
-            new_coord = new_coord + coord_update
+            #print(coord_update)
+            new_coord += coord_update
 
         # match self.update_coord:
 

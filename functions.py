@@ -21,10 +21,12 @@ delta_t =0.01
 
 batch_size = 128
 lamda_reg =0.2
+cutoff = 10.0
 wavenum_init=0 #10
 wavenum_init_ydir=0 #10
 
-cell_vector = torch.tensor([[[21.04, 0.0, 0.0], [0.0, 21.04, 0.0], [0.0, 0.0, 21.04]]], device=device)
+#cell_vector = torch.tensor([[[21.04, 0.0, 0.0], [0.0, 21.04, 0.0], [0.0, 0.0, 21.04]]], device=device)
+cell_vector = torch.tensor([[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]], device=device)
 
 def mse_loss(output, target, wavenum_init,lamda_reg):
     loss1 = F.mse_loss(output,target) 
@@ -73,16 +75,21 @@ def get_loss_cond(model, x_0, t, label_batch):  #???
     return  mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
 
 
-def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff = 3):  #???
+def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff = cutoff):  #???
     # capply pbc on ondition and targets 
     #print('x_0 shape: ', x_0.shape)
     x_0 = x_0.squeeze().to(t.device)
+    # print("mean and std of x_0: ", torch.mean(x_0), torch.std(x_0))
+    # print("mean and std of label_batch: ", torch.mean(label_batch), torch.std(label_batch))
     label_batch = label_batch.squeeze().to(t.device)
     # print('x_0 shape: ', x_0.shape)
     # print('label_batch shape: ', label_batch.shape)
 
     x_0[:, :, :3] = pbc_coord(x_0[:, :, :3], cell_vector)
+    # print('x_0 shape: ', x_0.shape)
+    # print("cell vector shape: ", cell_vector.shape)
     label_batch[:, :, :3] = pbc_coord(label_batch[:, :, :3], cell_vector)
+    # print('label_batch shape: ', label_batch.shape)
     x_noisy, noise = forward_diffusion_sample(x_0, t, device)
     x_noisy = x_noisy.squeeze().to(t.device)
     noise = noise.squeeze().to(t.device)
@@ -95,8 +102,10 @@ def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff =
 
     # distance mtx and masks
     # dist_mtx = calc_distance(x_coord).to(t.device)
-    print('x_coord shape: ', x_coord.shape)
+    # print('x_coord shape: ', x_coord.shape)
+    # print("cell vector shape: ", cell_vector.shape)
     dist_mtx, disp_mtx, min_idx = compute_min_distance_pbc_single_cell(x_coord, x_coord, cell_vector, cell_vector, cutoff)
+    # print('dist_mtx shape: ', dist_mtx.shape)
     mask = torch.ones((n_frames, n_atoms)).to(t.device)
     mask2d = dist_mtx < cutoff
     # currently [x_noisy, x_0] are passed to atom_feat in the model
@@ -107,6 +116,7 @@ def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff =
     label_batch = label_batch.unsqueeze(1)
     #noise_pred = torch.cat((coord_noise_pred, feat_noise_pred), dim=-1).unsqueeze(1)     
     x_noisy = x_noisy.unsqueeze(1)   
+    # print('x_noisy shape: ', x_noisy.shape)
 
     if is_gen_step:
         return x_noisy
@@ -117,7 +127,7 @@ def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff =
     return  mse_loss((x_noisy-label_batch), noise_pred, wavenum_init, lamda_reg)
 
 
-def sample_from_egnn(model, x_noisy, cond, t, cutoff = 3):
+def sample_from_egnn(model, x_noisy, cond, t, cutoff = cutoff):
     # squeeze tensors before pass to the model
 
     x_noisy = x_noisy.squeeze(1)
@@ -152,7 +162,7 @@ def pbc_coord(coord: torch.Tensor, lattice: torch.Tensor) -> torch.Tensor:
     # Calculate the fractional coordinates
     fractional_coord = torch.einsum('bji,bni->bnj', torch.inverse(lattice), coord)
     # Apply PBC
-    fractional_coord = fractional_coord - torch.floor(fractional_coord)
+    fractional_coord = fractional_coord - torch.round(fractional_coord)
     # Convert back to Cartesian coordinates
     coord = torch.einsum('bji,bnj->bni', lattice, fractional_coord)
     return coord
@@ -164,7 +174,7 @@ def compute_min_distance_pbc_single_cell(
                     lattice1: torch.Tensor,  # (batch, 3, 3) lattice vectors for coord1 (GT)
                     lattice2: torch.Tensor,  # (batch, 3, 3) optional lattice for coord2 (Pred)
                     mask: torch.Tensor,
-                    cutoff: float = 5,
+                    cutoff: float = cutoff,
                     eps: float = 1e-6,
                     return_disp: bool = False,
                     num_image_cell: int = 1) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
@@ -260,9 +270,12 @@ def forward_diffusion_sample(x_0, t, device="cuda"):
     Takes an image and a timestep as input and
     returns the noisy version of it
     """
-    x_0 = x_0.squeeze()
-    x_0[:, :, :3] = pbc_coord(x_0[:, :, :3], cell_vector)
-    noise = torch.randn_like(x_0)
+    x_0 = x_0.squeeze(1)
+    # print('x_0 shape in forward sample : ', x_0.shape)
+    # print('cell vector shape in forward sample : ', cell_vector.shape)
+    x_0[:, :, :3] = pbc_coord(x_0[:, :, :3], cell_vector.to(x_0.device))
+    # print('x_0 shape in forward sample after pbc: ', x_0.shape)
+    noise = torch.randn_like(x_0) * 0.25 # sigma set to 0.25
     sqrt_alphas_cumprod_t = get_index_from_list(sqrt_alphas_cumprod, t, x_0.shape)
     sqrt_one_minus_alphas_cumprod_t = get_index_from_list(
         sqrt_one_minus_alphas_cumprod, t, x_0.shape

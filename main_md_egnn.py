@@ -23,16 +23,16 @@ args = parser.parse_args()
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Initialize wandb
-wandb.init(project='diffusionMD')
+#wandb.init(project='diffusionMD')
 exp_name = f'egnn_3lr_1e-4_t250_{args.temperature}K_ pbc_fixed'
-wandb.run.name = exp_name
+#wandb.run.name = exp_name
 
 # options for the model and training
 dataset_path = "./dataset"
 result_path = "./results"
 
 save_interval = 10 # how often to save the model
-num_epochs = 31
+num_epochs = 501
 learning_rate = 1e-4 # 0.00001
 
 #data load
@@ -95,41 +95,41 @@ model.to(device)
 optimizer = Adam(model.parameters(), lr=learning_rate, amsgrad=True)
 
 #Training
-iter_cnt_total = 0
-for epoch in range(0, num_epochs):  # loop over the dataset multiple times
-    running_loss = 0.0
-    mean_loss = 0.0
-    iter_cnt_per_epoch = 0
+# iter_cnt_total = 0
+# for epoch in range(0, num_epochs):  # loop over the dataset multiple times
+#     running_loss = 0.0
+#     mean_loss = 0.0
+#     iter_cnt_per_epoch = 0
 
-    for step in range(0,TRAIN_SIZE-batch_size,batch_size):
-        # get the inputs; data is a list of [inputs, labels]
-        indices = np.random.permutation(np.arange(start=step, stop=step+batch_size))
-        input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
+#     for step in range(0,TRAIN_SIZE-batch_size,batch_size):
+#         # get the inputs; data is a list of [inputs, labels]
+#         indices = np.random.permutation(np.arange(start=step, stop=step+batch_size))
+#         input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
         
-        # zero the parameter gradients
-        optimizer.zero_grad()
-        t = torch.randint(0, T, (batch_size,), device=device).long()
-        loss = get_loss_cond_egnn(model, input_batch.float().cuda(), t, label_batch.float().cuda())
-        loss.backward()
-        optimizer.step()
+#         # zero the parameter gradients
+#         optimizer.zero_grad()
+#         t = torch.randint(0, T, (batch_size,), device=device).long()
+#         loss = get_loss_cond_egnn(model, input_batch.float().cuda(), t, label_batch.float().cuda())
+#         loss.backward()
+#         optimizer.step()
 
-        wandb.log({'loss': loss}, step=iter_cnt_total)
-        indices = np.random.permutation(np.arange(start=0, stop=batch_size))
-        input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
-        val_loss = get_loss_cond_egnn(model, input_batch.float().cuda(), t, label_batch.float().cuda())
-        wandb.log({'val_loss': val_loss}, step=iter_cnt_total)
-        wandb.log({'epoch': epoch}, step=iter_cnt_total)
+#         wandb.log({'loss': loss}, step=iter_cnt_total)
+#         indices = np.random.permutation(np.arange(start=0, stop=batch_size))
+#         input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
+#         val_loss = get_loss_cond_egnn(model, input_batch.float().cuda(), t, label_batch.float().cuda())
+#         wandb.log({'val_loss': val_loss}, step=iter_cnt_total)
+#         wandb.log({'epoch': epoch}, step=iter_cnt_total)
 
-        mean_loss += loss.item()
-        iter_cnt_per_epoch += 1
-        iter_cnt_total += 1
+#         mean_loss += loss.item()
+#         iter_cnt_per_epoch += 1
+#         iter_cnt_total += 1
         
-    mean_loss /= iter_cnt_per_epoch
-    #print('Epoch',epoch, 'Mean Loss',mean_loss)
-    wandb.log({'mean_loss': mean_loss}, step=iter_cnt_total)
-    if epoch % save_interval == 0:
-        torch.save(model.state_dict(), os.path.join(result_path, './Diffusion_MD_trial_'+str(exp_name)+'_'+str(num_epochs)+'.pt'))
-        print('Model saved')
+#     mean_loss /= iter_cnt_per_epoch
+#     #print('Epoch',epoch, 'Mean Loss',mean_loss)
+#     wandb.log({'mean_loss': mean_loss}, step=iter_cnt_total)
+#     if epoch % save_interval == 0:
+#         torch.save(model.state_dict(), os.path.join(result_path, './Diffusion_MD_trial_'+str(exp_name)+'_'+str(num_epochs)+'.pt'))
+#         print('Model saved')
 
 #%%
 # laod weights
@@ -162,6 +162,8 @@ for i in range(Nframes):
                 if i < d1:
                     x_noisy, noise = forward_diffusion_sample(te_x[i,:,:,:].reshape([1,1,64,9]).float(), tt, device)
                     u=sample_from_egnn(model, x_noisy, te_x[i,:,:,:].reshape([1,1,64,9]).float().to(device), tt)
+                    print("mean of te_x[i,:,:,:] : ", torch.mean(te_x[i,:,:,:]).item())
+                    print("mean of u : ", np.mean(u.detach().cpu().numpy()))
                 else:
                     x_noisy, noise = forward_diffusion_sample(
                         torch.from_numpy(pred[i-1, k,ens,:,:,:]).reshape([1,1,64,9]).float(), tt, device)
@@ -171,11 +173,13 @@ for i in range(Nframes):
                 
                 pred[i, k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
         else:
-            mean_traj = torch.from_numpy(np.mean(pred [i, k-1,:,:,:,:],0).reshape([1,1,64,9])).float()
+            print(pred[i, k-1,:,:,:,:].shape)
+            mean_traj = torch.from_numpy(np.mean(pred[i, k-1,:,:,:,:],2).reshape([1,1,64,9])).float()
+            print(mean_traj.shape)
             for ens in range (0, Nens):
                 tt =  torch.randint(0, T, (1,), device=device).long()
                 x_noisy, noise = forward_diffusion_sample(mean_traj, tt, device)
-                #u=x_noisy - model(x_noisy, tt)
+                #u=x_noisy - model(x_noisy, tt
                 if i < d1:
                     u=sample_from_egnn(model, x_noisy, te_x[i,:,:,:].reshape([1,1,64,9]).float().to(device), tt)
                 else:
@@ -193,7 +197,7 @@ te_y_denorm = denormalize_md(te_y, mean_list_y, std_list_y)
 
 #%% 
 
-np.savez(os.path.join(result_path, './'+f'Diffusion_MD_trial_egnn_3lr_3e-4_t250_1000_{args.temperature}K'+'.npz'), pred = pred, GT = te_y)
+np.savez(os.path.join(result_path, './'+model_name+'.npz'), pred = pred, GT = te_y)
 #np.savez(os.path.join(result_path, './'+str(args.exp_name)+'.npz'), pred = pred, GT = te_y_denorm)
 print('Saved Predictions')
 
