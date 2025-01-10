@@ -17,7 +17,7 @@ import ase.io
 # Input
 os.chdir('/scratch/x2895a03/research/md-diffusion/Ashesh')
 temperature = '300K'
-trajectory_filename = f'argon_trajectory_warp_{temperature}.traj'
+trajectory_filename = f'argon_trajectory_long_{temperature}.traj'
 
 
 # %%

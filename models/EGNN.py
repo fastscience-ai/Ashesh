@@ -320,7 +320,7 @@ class EGNN(nn.Module):
         self.atomic_emb = nn.Linear(100, h_dim) # Not using this for now
         # encoding layers
         self.time_enc = TimestepEncoding(h_dim, num_timesteps)
-        self.enc_dim = 12 if use_condition else 9
+        self.enc_dim = 15 if use_condition else 9
         self.feat_enc = nn.Linear(self.enc_dim, h_dim) # encoding [force, velocity, condition(optional)]
         self.combine = nn.Linear(2*h_dim, h_dim)
 
@@ -390,7 +390,7 @@ class EGNN(nn.Module):
             radial = 1 / (radial + 0.3)
 
         if self.use_condition:
-                atom_feat = torch.cat([atom_feat, condition[:, :, 3:]], dim = -1) # (batch, num_atom, 18)
+                atom_feat = torch.cat([atom_feat, condition], dim = -1) # (batch, num_atom, 18)
         atom_feat = self.feat_enc(atom_feat)
         t_feat = self.time_enc(atom_feat, t)
 

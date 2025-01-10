@@ -85,10 +85,11 @@ def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff =
     # print('x_0 shape: ', x_0.shape)
     # print('label_batch shape: ', label_batch.shape)
 
-    x_0[:, :, :3] = pbc_coord(x_0[:, :, :3], cell_vector)
+    ### x_0[:, :, :3] = pbc_coord(x_0[:, :, :3], cell_vector)
     # print('x_0 shape: ', x_0.shape)
     # print("cell vector shape: ", cell_vector.shape)
-    label_batch[:, :, :3] = pbc_coord(label_batch[:, :, :3], cell_vector)
+
+    ### label_batch[:, :, :3] = pbc_coord(label_batch[:, :, :3], cell_vector)
     # print('label_batch shape: ', label_batch.shape)
     x_noisy, noise = forward_diffusion_sample(x_0, t, device)
     x_noisy = x_noisy.squeeze().to(t.device)
@@ -132,7 +133,8 @@ def sample_from_egnn(model, x_noisy, cond, t, cutoff = cutoff):
 
     x_noisy = x_noisy.squeeze(1)
     cond = cond.squeeze(1)
-    cond[:, :, :3] = pbc_coord(cond[:, :, :3], cell_vector)
+    ### x_noisy[:, :, :3] = pbc_coord(x_noisy[:, :, :3], cell_vector)
+    ### cond[:, :, :3] = pbc_coord(cond[:, :, :3], cell_vector)
     
     n_frames, n_atoms, n_features = x_noisy.shape
     x_coord, x_force_speed = torch.split(x_noisy, [3, 6], dim=-1)
@@ -144,10 +146,12 @@ def sample_from_egnn(model, x_noisy, cond, t, cutoff = cutoff):
     feat_noise_pred, coord_noise_pred = model(x_force_speed, x_coord, dist_mtx, disp_mtx, t.view(-1, 1), 
                                                 adj_mat=mask2d, mask=mask, mask2d=mask2d, condition=cond)
 
-    noise_pred = feat_noise_pred.unsqueeze(1)
-    x_noisy = x_noisy.unsqueeze(1)
+    noise_pred = feat_noise_pred #.unsqueeze(1)
+    x_noisy = x_noisy #.unsqueeze(1)
+    u = x_noisy - noise_pred
+    ### u[:, :, :3] = pbc_coord(u[:, :, :3], cell_vector)
     
-    return x_noisy - noise_pred
+    return u.unsqueeze(1)
 
 
 def pbc_coord(coord: torch.Tensor, lattice: torch.Tensor) -> torch.Tensor:
@@ -273,7 +277,8 @@ def forward_diffusion_sample(x_0, t, device="cuda"):
     x_0 = x_0.squeeze(1)
     # print('x_0 shape in forward sample : ', x_0.shape)
     # print('cell vector shape in forward sample : ', cell_vector.shape)
-    x_0[:, :, :3] = pbc_coord(x_0[:, :, :3], cell_vector.to(x_0.device))
+    
+    ### x_0[:, :, :3] = pbc_coord(x_0[:, :, :3], cell_vector.to(x_0.device))
     # print('x_0 shape in forward sample after pbc: ', x_0.shape)
     noise = torch.randn_like(x_0) * 0.25 # sigma set to 0.25
     sqrt_alphas_cumprod_t = get_index_from_list(sqrt_alphas_cumprod, t, x_0.shape)

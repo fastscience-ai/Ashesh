@@ -18,13 +18,14 @@ parser.add_argument("--result-path", type=str, default="results")
 parser.add_argument("--model-type", type=str, default="egnn")
 parser.add_argument('--temperature', type=int, default=300)
 parser.add_argument("--exp_name", type=str, default="egnn_3lr_3e-4_t250")
-args = parser.parse_args()
+args = parser.parse_args([])
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # Initialize wandb
 #wandb.init(project='diffusionMD')
 exp_name = f'egnn_3lr_1e-4_t250_{args.temperature}K_ pbc_fixed'
+print("exp name : ", exp_name)
 #wandb.run.name = exp_name
 
 # options for the model and training
@@ -146,59 +147,90 @@ print("Loading successful")
 T = D_TIME_STEP
 Nens = 10
 Nframes = 15000
-Nsteps = 1 # number of experiments
+Nsteps = 200 # number of experiments
 d1,d2,d3,d4 = np.shape(te_x)
-pred = np.zeros([Nframes,Nsteps,Nens,1,64,9]) # 64 atoms 9 features
+# pred = np.zeros([Nframes,Nsteps,Nens,1,64,9]) # 64 atoms 9 features
+pred = np.zeros([Nsteps,Nens,1,64,9]) 
 print(pred.shape)
 
 #%%
-for i in range(Nframes):
-    for k in range(0, Nsteps):
-        print(i, k ,'time step',k)
-        if (k==0):
-            for ens in range (0, Nens):
-                tt =  torch.randint(0, T, (1,), device=device).long() # diffusion time step--> random tt 
+for k in range(0, Nsteps):
+    print('time step',k)
+    if (k==0):
+        for ens in range (0, Nens):
+            tt =  torch.randint(0, T, (1,), device=device).long() # diffusion time step--> random tt 
+            x_noisy, noise = forward_diffusion_sample(te_x[0,:,:,:].reshape([1,1,64,9]).float(), tt, device)
+            u=sample_from_egnn(model, x_noisy, te_x[0,:,:,:].reshape([1,1,64,9]).float().to(device), tt)
+            pred[k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
+    else:
+        print(pred[k-1,:,:,:,:].shape)
+        mean_traj = torch.from_numpy(np.mean(pred [k-1,:,:,:,:],0).reshape([1,1,64,9])).float()
+        print(mean_traj.shape)
+        for ens in range (0, Nens):
+            tt =  torch.randint(0, T, (1,), device=device).long()
+            x_noisy, noise = forward_diffusion_sample(mean_traj, tt, device)
+            #u=x_noisy - model(x_noisy, tt)
+            u=sample_from_egnn(model, x_noisy, 
+                            mean_traj.reshape([1,1,64,9]).float().to(device), tt)
+            pred[k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
 
-                if i < d1:
-                    x_noisy, noise = forward_diffusion_sample(te_x[i,:,:,:].reshape([1,1,64,9]).float(), tt, device)
-                    u=sample_from_egnn(model, x_noisy, te_x[i,:,:,:].reshape([1,1,64,9]).float().to(device), tt)
-                    print("mean of te_x[i,:,:,:] : ", torch.mean(te_x[i,:,:,:]).item())
-                    print("mean of u : ", np.mean(u.detach().cpu().numpy()))
-                else:
-                    x_noisy, noise = forward_diffusion_sample(
-                        torch.from_numpy(pred[i-1, k,ens,:,:,:]).reshape([1,1,64,9]).float(), tt, device)
-                    u=sample_from_egnn(model, x_noisy, 
-                        torch.from_numpy(pred[i-1, k,ens,:,:,:]).reshape([1,1,64,9]).float().to(device), tt)
+# for i in range(d1):
+#     for k in range(0, Nsteps):
+#         print(i, k ,'time step',k)
+        # if (k==0):
+        #     for ens in range (0, Nens):
+        #         tt =  torch.randint(0, T, (1,), device=device).long() # diffusion time step--> random tt 
+
+        #         if i < d1:
+        #             x_noisy, noise = forward_diffusion_sample(te_x[i,:,:,:].reshape([1,1,64,9]).float(), tt, device)
+        #             u=sample_from_egnn(model, x_noisy, te_x[i,:,:,:].reshape([1,1,64,9]).float().to(device), tt)
+
+        #             print("mean of te_x[i,:,:,:] : ", torch.mean(te_x[i,:,:,:]).item())
+        #             print("mean of u : ", np.mean(u.detach().cpu().numpy()))
+        #         else:
+        #             x_noisy, noise = forward_diffusion_sample(
+        #                 torch.from_numpy(pred[i-1, k,ens,:,:,:]).reshape([1,1,64,9]).float(), tt, device)
+        #             u=sample_from_egnn(model, x_noisy, 
+        #                 torch.from_numpy(pred[i-1, k,ens,:,:,:]).reshape([1,1,64,9]).float().to(device), tt)
 
                 
-                pred[i, k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
-        else:
-            print(pred[i, k-1,:,:,:,:].shape)
-            mean_traj = torch.from_numpy(np.mean(pred[i, k-1,:,:,:,:],2).reshape([1,1,64,9])).float()
-            print(mean_traj.shape)
-            for ens in range (0, Nens):
-                tt =  torch.randint(0, T, (1,), device=device).long()
-                x_noisy, noise = forward_diffusion_sample(mean_traj, tt, device)
-                #u=x_noisy - model(x_noisy, tt
-                if i < d1:
-                    u=sample_from_egnn(model, x_noisy, te_x[i,:,:,:].reshape([1,1,64,9]).float().to(device), tt)
-                else:
-                    u=sample_from_egnn(model, x_noisy, 
-                        torch.from_numpy(pred[i-1, k,ens,:,:,:]).reshape([1,1,64,9]).float().to(device), tt)
+        #         pred[i, k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
+        # else:
+        #     print(pred[i, k-1,:,:,:,:].shape)
+        #     mean_traj = torch.from_numpy(np.mean(pred[i, k-1,:,:,:,:],2).reshape([1,1,64,9])).float()
+        #     print(mean_traj.shape)
+        #     for ens in range (0, Nens):
+        #         tt =  torch.randint(0, T, (1,), device=device).long()
+        #         x_noisy, noise = forward_diffusion_sample(mean_traj, tt, device)
+        #         #u=x_noisy - model(x_noisy, tt
+        #         if i < d1:
+        #             u=sample_from_egnn(model, x_noisy, te_x[i,:,:,:].reshape([1,1,64,9]).float().to(device), tt)
+        #         else:
+        #             u=sample_from_egnn(model, x_noisy, 
+        #                 torch.from_numpy(pred[i-1, k,ens,:,:,:]).reshape([1,1,64,9]).float().to(device), tt)
 
-                pred[i,k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
+        #         pred[i,k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
 
-
+#%%
+print(mean_list_y, std_list_y)
 #Denormalize
 print("pred and te_y shape : ", pred.shape, te_y.shape) # (1000, 100, 20, 1, 64, 9) torch.Size([1000, 1, 64, 9])
-
-pred_denorm = denormalize_md_pred(pred, mean_list_y, std_list_y)
+print("mean traj shape : ", np.mean(pred,1).shape)
+mean_traj = torch.from_numpy(np.mean(pred,1).reshape([-1,1,1,64,9])).float()
+# positions
+#mean_traj[..., :3] = mean_traj[..., :3] * 21.04 + np.array(mean_list_y)[:3]
+# forces and velocities
+#mean_traj[..., 3:] = mean_traj[..., 3:] * np.array(std_list_y)[3:] + np.array(mean_list_y)[3:]
+# pred_denorm = mean_traj * np.array(std_list_y) + np.array(mean_list_y)
+pred_denorm = np.squeeze(mean_traj, 1)
+print(pred_denorm.shape, te_y.shape, np.array(mean_list_y).shape, np.array(std_list_y).shape)
+pred_denorm = denormalize_md(pred_denorm, mean_list_y, std_list_y)
 te_y_denorm = denormalize_md(te_y, mean_list_y, std_list_y)
 
 #%% 
 
-np.savez(os.path.join(result_path, './'+model_name+'.npz'), pred = pred, GT = te_y)
-#np.savez(os.path.join(result_path, './'+str(args.exp_name)+'.npz'), pred = pred, GT = te_y_denorm)
+np.savez(os.path.join(result_path, './'+model_name+'_short.npz'), pred = pred_denorm, GT = te_y_denorm)
+np.savez(os.path.join(result_path, './'+str(args.exp_name)+'.npz'), pred = pred, GT = te_y_denorm)
 print('Saved Predictions')
 
 #%%

@@ -100,7 +100,7 @@ atoms.set_momenta(atoms.get_momenta() - atoms.get_momenta().mean(axis=0))
 dyn = VelocityVerlet(atoms, 2.5 * units.fs)  # Time step is 2.5 fs
 
 # Setup the trajectory writer
-trajectory_filename = f'argon_trajectory_warp_{int(temperature_K)}K.traj'
+trajectory_filename = f'argon_trajectory_long_{int(temperature_K)}K.traj'
 traj = Trajectory(trajectory_filename, 'w', atoms)
 
 # Attach the trajectory to the dynamics
@@ -120,7 +120,7 @@ def record_energy(a=atoms):
 # Now perform the simulation and record energies
 for step in tqdm(range(num_steps)):  # Number of steps
     dyn.run(num_frames_per_step)  # Run simulation for 100 * 2.5 fs = 250 fs
-    atoms.wrap()
+    #atoms.wrap()
     record_energy()
 traj.close()
 
