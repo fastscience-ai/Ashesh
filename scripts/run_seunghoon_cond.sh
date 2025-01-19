@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -J argon_md_egnn_300K_pbc_fixed
-#SBATCH -p cas_v100nv_4
+#SBATCH -J argon_md_egnn_300K_pbc_less_force_2
+#SBATCH -p eme_h200nv_8
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1

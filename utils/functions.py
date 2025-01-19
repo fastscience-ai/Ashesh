@@ -6,13 +6,13 @@ import torch.nn.functional as F
 import torch.optim as optim
 import sys
 #import netCDF4 as nc
-from data_loader_one_step_UVS import load_test_data
-from data_loader_one_step_UVS import load_train_data
+# from data_loader_one_step_UVS import load_test_data
+# from data_loader_one_step_UVS import load_train_data
 from torch.optim import Adam
 from typing import List, Dict, Tuple, Set, Union, Optional, Any, Callable
 
 import math
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu" # "cuda" if torch.cuda.is_available() else "cpu"
 
 #Parameters
 path_outputs = "./outputs/"
@@ -124,8 +124,11 @@ def get_loss_cond_egnn(model, x_0, t, label_batch, is_gen_step = False, cutoff =
 
     # (x_0+noise-noise_pred) - x_0 = x_1 - x_0
     # mse((x_1-x_0), (noise-noise_pred))
+    gt_noise = x_noisy-label_batch
+    gt_noise[..., 3:6] = 0
+    noise_pred[..., 3:6] = 0
 
-    return  mse_loss((x_noisy-label_batch), noise_pred, wavenum_init, lamda_reg)
+    return  mse_loss(gt_noise, noise_pred, wavenum_init, lamda_reg)
 
 
 def sample_from_egnn(model, x_noisy, cond, t, cutoff = cutoff):
@@ -147,11 +150,11 @@ def sample_from_egnn(model, x_noisy, cond, t, cutoff = cutoff):
                                                 adj_mat=mask2d, mask=mask, mask2d=mask2d, condition=cond)
 
     noise_pred = feat_noise_pred #.unsqueeze(1)
-    x_noisy = x_noisy #.unsqueeze(1)
-    u = x_noisy - noise_pred
-    ### u[:, :, :3] = pbc_coord(u[:, :, :3], cell_vector)
+    gt_noise = x_noisy-noise_pred
+    gt_noise[..., 3:6] = 0
+    noise_pred[..., 3:6] = 0
     
-    return u.unsqueeze(1)
+    return noise_pred.unsqueeze(1)
 
 
 def pbc_coord(coord: torch.Tensor, lattice: torch.Tensor) -> torch.Tensor:
@@ -441,7 +444,7 @@ def calc_distance(x:torch.Tensor):
 
 
 # Define beta schedule
-T = 300
+T = 250
 betas = linear_beta_schedule(timesteps=T)
 
 # Pre-calculate different terms for closed form

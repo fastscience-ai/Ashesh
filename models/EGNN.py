@@ -320,7 +320,7 @@ class EGNN(nn.Module):
         self.atomic_emb = nn.Linear(100, h_dim) # Not using this for now
         # encoding layers
         self.time_enc = TimestepEncoding(h_dim, num_timesteps)
-        self.enc_dim = 15 if use_condition else 9
+        self.enc_dim = 9 # if use_condition else 9
         self.feat_enc = nn.Linear(self.enc_dim, h_dim) # encoding [force, velocity, condition(optional)]
         self.combine = nn.Linear(2*h_dim, h_dim)
 
@@ -371,7 +371,7 @@ class EGNN(nn.Module):
         # adj_mat: (batch, num_atom, num_atom)
         # lattice: (batch, 3, 3)
 
-        new_coord = 0
+        new_coord = coord
         if radial is None:
             disp = coord.unsqueeze(2) - coord.unsqueeze(1) # (batch, num_atom, num_atom, 3)
         disp = disp.squeeze()           # (batch, num_atom, num_atom, 3)
@@ -390,7 +390,9 @@ class EGNN(nn.Module):
             radial = 1 / (radial + 0.3)
 
         if self.use_condition:
-                atom_feat = torch.cat([atom_feat, condition], dim = -1) # (batch, num_atom, 18)
+                atom_feat = atom_feat[..., -3:] # only velocities
+                condition = torch.cat([condition[..., :3], condition[..., -3:]], dim = -1) # coord, vel
+                atom_feat = torch.cat([atom_feat, condition], dim = -1) # (batch, num_atom, 9)
         atom_feat = self.feat_enc(atom_feat)
         t_feat = self.time_enc(atom_feat, t)
 
@@ -403,26 +405,14 @@ class EGNN(nn.Module):
 
         for idx in range(self.num_layer):
 
-            feat, coord_update = self.layer[idx](feat, coord, radial, disp, adj_mat, mask, mask2d)
+            feat, coord_update = self.layer[idx](feat, new_coord, radial, disp, adj_mat, mask, mask2d)
             #print(coord_update)
-            new_coord += coord_update
-
-        # match self.update_coord:
-
-        #     case 'all':
-
-        #         pass
-
-        #     case 'last':
-
-        #         new_coord = coord + coord_update
-
-        #     case 'none':
-
-        #         new_coord = coord
+            new_coord = new_coord.clone() + coord_update
 
         new_feat = self.dec(feat) * mask.unsqueeze(-1)
+        #if self.out_dim == 6: # if only predict coord and vel,
         new_coord = new_coord * mask.unsqueeze(-1)
+        # new_feat[..., :3] = new_coord
 
         return new_feat, new_coord
 
