@@ -36,6 +36,7 @@ print(te_x.shape)
 
 #%%
 
+
 #torch.cuda.set_device(0)
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -51,12 +52,11 @@ lr_milestones = None
 if num_epochs > 10:
     lr_milestones = [num_epochs//3, num_epochs//3*2]
 
-exp_name = f"main_md_ep{num_epochs}_one_step_noise_\
-single_temp_{args.temperature}K_T{args.timesteps}_lr{learning_rate}_pos_with_vel"
+exp_name = f"main_md_ep{num_epochs}_one_step_difference_\
+single_temp_{args.temperature}K_T{args.timesteps}_lr{learning_rate}_debug"
 print("exp name : ", exp_name)
-
-# wandb.init(project='diffusionMD')
-# wandb.run.name = exp_name
+wandb.init(project='diffusionMD')
+wandb.run.name = exp_name
 
 model_save_path = os.path.join('./', args.result_path, exp_name)
 if not os.path.exists(model_save_path):
@@ -117,6 +117,24 @@ def sample_next_frame(model, x_noisy, condition, tt):
             x_prev = pred_mean
 
     return x_prev
+#%%
+# v_0 = tr_x[0, 0, 0][3:6]
+# x_0 = tr_x[0, 0, 0][:3]
+# x_1 = tr_x[1, 0, 0][:3]
+# print(x_0, v_0)
+
+# x_noisy, noise = forward_diffusion_sample(tr_x[0:10], torch.tensor([299]), device)
+# print(x_noisy.shape)
+# print(x_noisy[0, 0, :3])
+# print(torch.mean(x_noisy[:, 0, :3]), torch.mean(tr_x[:10][..., :3]))
+# print(torch.mean(x_noisy[:, 0, 3:6]), torch.mean(tr_x[:10][..., 3:6]))
+# print(torch.mean(x_noisy[:, 0, -3:]), torch.mean(tr_x[:10][..., -3:]))
+
+# print(torch.std(x_noisy[:, 0, :3]), torch.std(tr_x[:10][..., :3]))
+# print(torch.std(x_noisy[:, 0, 3:6]), torch.std(tr_x[:10][..., 3:6]))
+# print(torch.std(x_noisy[:, 0, -3:]), torch.std(tr_x[:10][..., -3:]))
+# #%%
+# print(torch.tensor([200]*10))
 
 #%%
 
@@ -146,6 +164,7 @@ if lr_milestones:
 #         # get the inputs; data is a list of [inputs, labels]
 #         indices = np.random.permutation(np.arange(start=step, stop=step+batch_size))
 #         input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
+#         temp_batch = tr_ts[indices]
 
 #         t = torch.randint(1, T, (1,), device=device).long() 
 #         t = t.repeat(batch_size)
@@ -157,13 +176,10 @@ if lr_milestones:
 #         # zero the parameter gradients
 #         optimizer.zero_grad()
 
-#         temp_batch = None
-#         temps = None
 #         if use_temp_embed:
-#             temp_batch = tr_ts[indices]
 #             temps = temp_batch.float().to(device)        
 
-#         loss = get_loss_cond_pos(model, input_batch.float().cuda(), t,
+#         loss = get_loss_cond_diff(model, input_batch.float().cuda(), t,
 #                              label_batch.float().cuda(), temps)
         
 #         # TODO : Implement recursive sampling logic in functions.py
@@ -219,41 +235,39 @@ with torch.no_grad():
         temp = temp.reshape(*temp.shape, 1, 1, 1).expand(*temp.shape, 1, 64, 1)
         eps = 0.8
         idx_to_start = torch.where(torch.abs(te_ts.float() - (t_to_simulate / 300.)) < eps)[0][0]
-    else:
-        idx_to_start = 0
     
     for k in range(0, Nsteps):
         print('time step',k)   
         if (k==0):
             for ens in range (0, Nens):
-                tt =  torch.tensor([T-1], device=device).long()
-                #tt = torch.randint(0, T, (1,), device=device).long() # diffusion time step--> random tt 
+                #tt =  torch.tensor([1], device=device).long()
+                tt = torch.randint(0, T//10, (1,), device=device).long() # diffusion time step--> random tt 
                 x_0 = te_x[idx_to_start,:,:,:].reshape([1,1,64,9]).float().to(device)
                 x_noisy, noise = forward_diffusion_sample(x_0, tt, device)
                 x_noisy = x_noisy.unsqueeze(1)
                 noise = noise.unsqueeze(1)
                 #print(x_noisy.device, x_0.device, tt.device)
-                cond = x_0
                 if temp is not None:
                     x_0 = torch.cat([x_0, temp], dim=-1)
-                u=x_noisy - model(x_noisy, x_0, tt)
-                # u = sample_next_frame(model, x_noisy, x_0, tt)
+                #u=x_0[..., :9] + RK4_sampler(model, x_noisy, x_0, tt)
+                # model(x_noisy, x_0, tt) # * betas[tt.item()] / sqrt_one_minus_alphas_cumprod[tt.item()]
+                u = sample_next_frame(model, x_noisy, x_0, tt)
                 pred[k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
         else:
             mean_traj = torch.from_numpy(np.mean(pred [k-1,:,:,:,:],0).reshape([1,1,64,9])).float().to(device) 
-            # choose random ensemble? error 누적될수도
+            # single traj prediction : just change to mean -> single
             single_traj = torch.from_numpy(pred [k-1,0,:,:,:].reshape([1,1,64,9])).float().to(device)
+            # choose random ensemble? error 누적될수도
             for ens in range (0, Nens):
-                tt =  torch.tensor([T-1], device=device).long()
-                # tt =  torch.randint(0, T, (1,), device=device).long()
+                tt =  torch.randint(0, T//10, (1,), device=device).long()
                 x_noisy, noise = forward_diffusion_sample(mean_traj, tt, device)
-                cond = mean_traj
                 if temp is not None :
-                    cond = torch.cat([mean_traj, temp], dim=-1)
+                    cond = torch.cat([single_traj, temp], dim=-1)
                 x_noisy = x_noisy.unsqueeze(1)
                 noise = noise.unsqueeze(1)
-                u=x_noisy - model(x_noisy, cond, tt)
-                #u = sample_next_frame(model, x_noisy, mean_traj, tt)
+                # u=mean_traj[..., :9] + RK4_sampler(model, x_noisy, cond, tt)
+                # model(x_noisy, cond, tt) # * betas[tt.item()] / sqrt_one_minus_alphas_cumprod[tt.item()]
+                u = sample_next_frame(model, x_noisy, mean_traj, tt)
                 pred[k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
 #%%
 print(pred.shape, te_y.shape, np.array(mean_list_y).shape) #(100, 20, 1, 64, 9) torch.Size([100, 1, 64, 9])
@@ -261,7 +275,7 @@ print(pred.shape, te_y.shape, np.array(mean_list_y).shape) #(100, 20, 1, 64, 9) 
 print(pred.shape, te_y.shape) #(100, 20, 1, 64, 9) torch.Size([100, 1, 64, 9])
 pred_denorm = denormalize_md_pred(pred, mean_list_y, std_list_y)
 te_y_denorm = denormalize_md(te_y, mean_list_y, std_list_y)
-np.savez(os.path.join(args.result_path, f'./{exp_name}_single_traj_T'),pred,te_y_denorm[:Nsteps])
+np.savez(os.path.join(args.result_path, f'./{exp_name}'),pred,te_y_denorm[:Nsteps])
 print('Saved Predictions')
 
 # %%

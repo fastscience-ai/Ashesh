@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J md_gen
+#SBATCH -J egnn_sanity_check
 #SBATCH -p eme_h200nv_8
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -20,7 +20,6 @@ cd $WORKSPACE_PATH
 
 echo "START"
 
-srun python $WORKSPACE_PATH/md_simul/MD_300K_exmaple.py 
-srun python $WORKSPACE_PATH/md_simul/reading_traj_example.py
+srun python $WORKSPACE_PATH/main_md_egnn.py --temperature 300
 
 echo "DONE"

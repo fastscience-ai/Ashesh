@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH -J md_gen
-#SBATCH -p eme_h200nv_8
+#SBATCH -J mdmd
+#SBATCH -p cas_v100nv_4
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
-#SBATCH --time 11:30:00
+#SBATCH --time 23:30:00
 #SBATCH --comment pytorch
 #SBATCH -o /scratch/x2895a03/research/md-diffusion/Ashesh/logs/output_%x_%j.out
 #SBATCH -e /scratch/x2895a03/research/md-diffusion/Ashesh/logs/output_%x_%j.err
@@ -20,7 +20,6 @@ cd $WORKSPACE_PATH
 
 echo "START"
 
-srun python $WORKSPACE_PATH/md_simul/MD_300K_exmaple.py 
-srun python $WORKSPACE_PATH/md_simul/reading_traj_example.py
+srun python $WORKSPACE_PATH/main_md.py --gpu-list 0
 
 echo "DONE"

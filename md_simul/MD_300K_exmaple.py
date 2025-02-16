@@ -17,7 +17,7 @@
 
 # %%
 # Input
-temperature_K = 300.0
+temperature_K = 1000.0
 supercell_size = (4,4,4)
 num_steps = 10000
 num_frames_per_step = 10

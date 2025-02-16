@@ -18,8 +18,8 @@ print(args.root)
 # dataset selection
 dset_generator = None
 tmep_ = args.temperature
-temp_list = args.t_selection
-use_temp_embed = len(temp_list) >= 1
+#temp_list = args.t_selection
+use_temp_embed = len(tmep_) >= 1
 if len(temp_list) == 0:
     dset_generator = argon_dataset
 elif len(temp_list) >= 1:
@@ -111,7 +111,7 @@ def sample_next_frame(model, x_noisy, condition, tt):
         # Add noise only for t > 0
         if t > 0:
             posterior_variance = betas[t] * (1 - alphas_cumprod_prev[t]) / (1 - alphas_cumprod[t])
-            noise = torch.randn_like(x_prev) * 0.5
+            noise = torch.randn_like(x_prev) * 0.01
             x_prev = pred_mean + torch.sqrt(posterior_variance) * noise
         else:
             x_prev = pred_mean
@@ -163,17 +163,8 @@ if lr_milestones:
 #             temp_batch = tr_ts[indices]
 #             temps = temp_batch.float().to(device)        
 
-#         loss = get_loss_cond_pos(model, input_batch.float().cuda(), t,
+#         loss = get_loss_cond_rev(model, input_batch.float().cuda(), t,
 #                              label_batch.float().cuda(), temps)
-        
-#         # TODO : Implement recursive sampling logic in functions.py
-#         # recursive sampling 
-#         # x_noisy, noise = forward_diffusion_sample(x_0, t, device)
-#         # t = torch.randint(0, T, (batch_size,), device=device).long()
-#         # x_noisy = x_noisy.unsqueeze(1)
-#         # noise = noise.unsqueeze(1)
-#         # u = sample_next_frame(model, x_noisy, x_0, t)
-#         # loss =  F.mse_loss(u,label_batch) 
 
 #         loss.backward()
 #         optimizer.step()
@@ -229,15 +220,14 @@ with torch.no_grad():
                 tt =  torch.tensor([T-1], device=device).long()
                 #tt = torch.randint(0, T, (1,), device=device).long() # diffusion time step--> random tt 
                 x_0 = te_x[idx_to_start,:,:,:].reshape([1,1,64,9]).float().to(device)
-                x_noisy, noise = forward_diffusion_sample(x_0, tt, device)
-                x_noisy = x_noisy.unsqueeze(1)
-                noise = noise.unsqueeze(1)
+                # generate from pure noise : 
+                x_noisy = torch.randn_like(x_0)
                 #print(x_noisy.device, x_0.device, tt.device)
                 cond = x_0
                 if temp is not None:
                     x_0 = torch.cat([x_0, temp], dim=-1)
-                u=x_noisy - model(x_noisy, x_0, tt)
-                # u = sample_next_frame(model, x_noisy, x_0, tt)
+                # u=x_noisy - model(x_noisy, x_0, tt)
+                u = sample_next_frame(model, x_noisy, x_0, tt)
                 pred[k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
         else:
             mean_traj = torch.from_numpy(np.mean(pred [k-1,:,:,:,:],0).reshape([1,1,64,9])).float().to(device) 
@@ -246,14 +236,13 @@ with torch.no_grad():
             for ens in range (0, Nens):
                 tt =  torch.tensor([T-1], device=device).long()
                 # tt =  torch.randint(0, T, (1,), device=device).long()
-                x_noisy, noise = forward_diffusion_sample(mean_traj, tt, device)
-                cond = mean_traj
+                # generate from pure noise : 
+                x_noisy = torch.randn_like(x_0)
+                cond = single_traj
                 if temp is not None :
-                    cond = torch.cat([mean_traj, temp], dim=-1)
-                x_noisy = x_noisy.unsqueeze(1)
-                noise = noise.unsqueeze(1)
-                u=x_noisy - model(x_noisy, cond, tt)
-                #u = sample_next_frame(model, x_noisy, mean_traj, tt)
+                    cond = torch.cat([single_traj, temp], dim=-1)
+                # u=x_noisy - model(x_noisy, cond, tt)
+                u = sample_next_frame(model, x_noisy, single_traj, tt)
                 pred[k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
 #%%
 print(pred.shape, te_y.shape, np.array(mean_list_y).shape) #(100, 20, 1, 64, 9) torch.Size([100, 1, 64, 9])
@@ -261,7 +250,7 @@ print(pred.shape, te_y.shape, np.array(mean_list_y).shape) #(100, 20, 1, 64, 9) 
 print(pred.shape, te_y.shape) #(100, 20, 1, 64, 9) torch.Size([100, 1, 64, 9])
 pred_denorm = denormalize_md_pred(pred, mean_list_y, std_list_y)
 te_y_denorm = denormalize_md(te_y, mean_list_y, std_list_y)
-np.savez(os.path.join(args.result_path, f'./{exp_name}_single_traj_T'),pred,te_y_denorm[:Nsteps])
+np.savez(os.path.join(args.result_path, f'./{exp_name}_vdm_single_traj_T'),pred,te_y_denorm[:Nsteps])
 print('Saved Predictions')
 
 # %%

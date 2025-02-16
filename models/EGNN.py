@@ -105,10 +105,13 @@ class EGCL(nn.Module):
             case 'paper':
 
                 update = self.coord_mlp(message) # (batch, num_atom, num_atom, 1)
-                update = torch.clamp(update * disp, min = -100, max = 100) * mask2d.unsqueeze(-1) # (batch, num_atom, num_atom, 3)
 
-                mask2d = mask2d * ~torch.eye(mask2d.size(1), dtype = torch.bool, device = mask2d.device).unsqueeze(0)
-                C = torch.sum(mask2d[:, 0, ...], dim = -1, keepdim = True).unsqueeze(-1) # (batch, 1, 1)
+                update = torch.clamp(update * disp, min = -100, max = 100) * mask2d # (batch, num_atom, num_atom, 3)
+
+                # mask2d shape 유지하면서 self-connection 제거
+                mask2d = mask2d * (~torch.eye(mask2d.size(1), dtype=torch.bool, device=mask2d.device).unsqueeze(0).unsqueeze(-1))
+                # C 계산 시 shape 유지
+                C = torch.sum(mask2d[:, 0, :, 0], dim=-1, keepdim=True).unsqueeze(-1)  # (batch, 1, 1)
 
             case 'repo':
 
@@ -116,8 +119,9 @@ class EGCL(nn.Module):
                 update = torch.clamp(update * disp, min = -100, max = 100) # (batch, num_atom, num_atom, 3)
 
                 C = 1
-
-        update = C * torch.sum(update * mask2d.unsqueeze(-1), dim = 2) # (batch, num_atom, 3)
+        # print("update", update.size())
+        # print("mask2d", mask2d.size())
+        update = C * torch.sum(update * mask2d, dim = 2) # (batch, num_atom, 3)
 
         return update
 
@@ -134,8 +138,11 @@ class EGCL(nn.Module):
         match self.implementation:
 
             case 'paper':
+                # print("message", message.size())
+                # print("mask2d", mask2d.size())
+                # print("adj_mat", adj_mat.size())
 
-                message = message * mask2d.unsqueeze(-1) * adj_mat.unsqueeze(-1)
+                message = message * mask2d * adj_mat
 
             case 'repo':
 
@@ -228,7 +235,9 @@ class EAL(nn.Module):
         k = k.reshape(num_batch, self.num_head, num_atom, self.head_dim)
         v = v.reshape(num_batch, self.num_head, num_atom, self.head_dim)
 
-        mask2d = mask2d.unsqueeze(1).expand(num_batch, self.num_head, num_atom, num_atom)
+        #print(mask2d.size())
+
+        mask2d = mask2d.permute(0,3,1,2).expand(num_batch, self.num_head, num_atom, num_atom)
 
         attn = torch.einsum('bhnd,bhmd->bhnm', q, k) * self.scale # (batch, head, num_atom, num_atom)
         attn = attn.masked_fill(~mask2d, torch.finfo(attn.dtype).min)
@@ -320,7 +329,7 @@ class EGNN(nn.Module):
         self.atomic_emb = nn.Linear(100, h_dim) # Not using this for now
         # encoding layers
         self.time_enc = TimestepEncoding(h_dim, num_timesteps)
-        self.enc_dim = 9 # if use_condition else 9
+        self.enc_dim = 15 if use_condition else 6
         self.feat_enc = nn.Linear(self.enc_dim, h_dim) # encoding [force, velocity, condition(optional)]
         self.combine = nn.Linear(2*h_dim, h_dim)
 
@@ -374,25 +383,27 @@ class EGNN(nn.Module):
         new_coord = coord
         if radial is None:
             disp = coord.unsqueeze(2) - coord.unsqueeze(1) # (batch, num_atom, num_atom, 3)
+            radial = torch.sum(disp ** 2, dim = -1, keepdim = True) # (batch, num_atom, num_atom, 1)
+            mask2d = radial < 0.3
+            adj_mat = mask2d
         disp = disp.squeeze()           # (batch, num_atom, num_atom, 3)
-        radial = radial.unsqueeze(-1)   # torch.sum(disp ** 2, dim = -1, keepdim = True) # (batch, num_atom, num_atom, 1)
-        #print('radial', radial.size())
-
-        # if self.use_pbc:
-
-        #     inv_lattice = torch.inverse(lattice)
-        #     frac_disp = torch.einsum('bijk,bkl->bijl', disp, inv_lattice)
-        #     frac_disp_pbc = frac_disp - torch.round(frac_disp)
-        #     disp = torch.einsum('bijk,bkl->bijl', frac_disp_pbc, lattice)
+         # torch.sum(disp ** 2, dim = -1, keepdim = True) # (batch, num_atom, num_atom, 1)
+        # print("atom_feat", atom_feat.size())
+        # print("coord", coord.size())
+        # print("radial", radial.size())
+        # print("disp", disp.size())
+        # print("adj_mat", adj_mat.size())
+        # print("mask", mask.size())
+        # print("mask2d", mask2d.size())
 
         if self.use_rinv:
 
             radial = 1 / (radial + 0.3)
 
         if self.use_condition:
-                atom_feat = atom_feat[..., -3:] # only velocities
-                condition = torch.cat([condition[..., :3], condition[..., -3:]], dim = -1) # coord, vel
-                atom_feat = torch.cat([atom_feat, condition], dim = -1) # (batch, num_atom, 9)
+                #atom_feat = atom_feat[..., -3:] # only velocities
+                #condition = torch.cat([condition[..., :3], condition[..., -3:]], dim = -1) # coord, vel
+                atom_feat = torch.cat([atom_feat, condition], dim = -1) # (batch, num_atom, 12)
         atom_feat = self.feat_enc(atom_feat)
         t_feat = self.time_enc(atom_feat, t)
 
@@ -407,7 +418,7 @@ class EGNN(nn.Module):
 
             feat, coord_update = self.layer[idx](feat, new_coord, radial, disp, adj_mat, mask, mask2d)
             #print(coord_update)
-            new_coord = new_coord.clone() + coord_update
+            #new_coord = new_coord.clone() + coord_update
 
         new_feat = self.dec(feat) * mask.unsqueeze(-1)
         #if self.out_dim == 6: # if only predict coord and vel,

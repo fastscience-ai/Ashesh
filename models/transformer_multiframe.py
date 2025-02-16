@@ -50,6 +50,9 @@ class LinformerAttention(nn.Module):
         v = self.vw(x)
 
         B, L, D = q.shape
+        # print("q shape", q.shape)
+        # print("x shape in attn", x.shape)
+
         q = torch.reshape(q, [B, L, self.n_heads, -1])
         q = torch.permute(q, [0, 2, 1, 3])
         k = torch.reshape(k, [B, L, self.n_heads, -1])
@@ -61,11 +64,13 @@ class LinformerAttention(nn.Module):
         v = torch.permute(v, [0, 1, 3, 2])
         qk = torch.matmul(q, k) * self.scale
         attn = torch.softmax(qk, dim=-1)
+        # print("attn shape", attn.shape)
         v_attn = torch.matmul(attn, v)
         v_attn = torch.permute(v_attn, [0, 2, 1, 3])
         v_attn = torch.reshape(v_attn, [B, L, D])
 
         x = self.ow(v_attn)
+        # print("out x shape", x.shape)
         return x
 
 def modulate(x, shift, scale):
@@ -114,6 +119,7 @@ class TransformerBlock(nn.Module):
         shift_mlp = self.beta_2(c)
         gate_msa = self.scale_1(c).unsqueeze(1)
         gate_mlp = self.scale_2(c).unsqueeze(1)
+        # x = self.attn(modulate(self.ln_1(x), shift_msa, scale_msa)) * gate_msa + x
         x = self.attn(modulate(self.ln_1(x), shift_msa, scale_msa)) * gate_msa + x
         return self.mlp(modulate(self.ln_2(x), shift_mlp, scale_mlp)) * gate_mlp + x
 
@@ -121,7 +127,7 @@ class FinalLayer(nn.Module):
     def __init__(self, dim, patch_size, out_channels):
         super().__init__()
         self.ln_final = nn.LayerNorm(dim, elementwise_affine=False, eps=1e-6)
-        self.linear = nn.Linear(dim, patch_size *  out_channels, bias=True)
+        self.linear = nn.Linear(dim, patch_size * out_channels, bias=True)
         self.gamma = nn.Linear(dim, dim)
         self.beta = nn.Linear(dim, dim)
         # Zero-out output layers:
@@ -154,8 +160,8 @@ class Transformer(nn.Module):
         self.first_input_size = input_size
 
         self.use_temp_embed = use_temp_embed
-        if self.use_temp_embed:
-            self.first_input_size += 1
+        # if self.use_temp_embed:
+        #     self.first_input_size += 1
         print("input size", self.input_size)
         self.patches = nn.Sequential(
             nn.Linear(self.input_size, dim)
@@ -179,20 +185,28 @@ class Transformer(nn.Module):
             nn.Linear(dim*(input_size + self.first_input_size), dim*input_size),
             nn.Linear(dim*input_size,dim*input_size)
         )
+        self.dyn_emb = nn.Sequential(
+            PositionalEmbedding(dim),
+            nn.Linear(dim, dim),
+            nn.SiLU(),
+            nn.Linear(dim, dim),
+        )  
 
         self.final = FinalLayer(dim, input_size, in_channels)
 
-    def forward(self, x, cond,  t):
+    def forward(self, x, cond, diffusion_t, temp_t):
         #print(x.shape)
-        t = self.emb(t)
+        t_emb = self.emb(diffusion_t)
+        temp_emb = self.dyn_emb(temp_t)
         # x = x.permute([0, 2, 3, 1])
         # cond = cond.permute([0, 2, 3, 1])
         x=torch.cat([x,cond],-1).permute([0, 2, 3, 1])
         #print("x shape : ", x.shape)
         B, _, H, C = x.shape
         x = torch.reshape(torch.flatten(x), [B, -1])
-        # print(x.shape)
+        # print(x.shape) # ([256, 1152])
         x = self.input_emb(x)
+        # print("after emb", x.shape) # ([256, 576])
         x = torch.reshape(x, [-1, self.dim, self.input_size, 1])
        # print("x,cond, t",x.shape,cond.shape, t.shape) #x,t torch.Size([100, 64, 9, 1]) torch.Size([100, 28])
         #print(x, t)
@@ -203,13 +217,15 @@ class Transformer(nn.Module):
         for i in range(N):
           x_emb.append(self.patches(x[:,i,:,:].reshape([B, H*C])))  # [batch, dim_atom x channel] --> [batch,  emb_dim]
         x = torch.cat(x_emb, 1)
+        # print("x after patch", x.shape)
         x = x.reshape([B, N, -1])# , print(x))
         #print(t.shape, x.shape, self.pos_embedding.shape)
         #torch.Size([100, 64]) torch.Size([100, 32, 64]) torch.Size([1, 32, 64])
-        x += self.pos_embedding
-        #print(x.shape, t.shape) #torch.Size([100, 32, 64])
+        #x += self.pos_embedding
+        # print("before attention : ", x.shape, temp_emb.shape, t_emb.shape) #torch.Size([100, 32, 64])
         for layer in self.transformer:
-            x = layer(x, t)
-        x = self.final(x, t)
+            x = layer(x, t_emb)
+            x = layer(x, temp_emb)
+        x = self.final(x, t_emb)
         x = x.reshape([B,C,N,H])
         return x
