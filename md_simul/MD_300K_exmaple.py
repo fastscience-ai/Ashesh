@@ -24,26 +24,26 @@ num_frames_per_step = 10
 print("Running MD simulation at", temperature_K, "K")
 
 
+# Parameters for datagen
+parser = argparse.ArgumentParser(description='MD simulation of Argon atoms')
+parser.add_argument('--temperature', type=float, default=300.0, help='Temperature in Kelvin')
+parser.add_argument('--system_size', type=int, default=5, help='Size of the supercell')
+parser.add_argument('--sim_length', type=int, default=20000, help='Number of steps')
+parser.add_argument('--root', type=str, default="/home/seunghoon/Ashesh")
+args = parser.parse_args()
 
+temperature_K = float(args.temperature)
+supercell_size = (args.system_size, args.system_size, args.system_size)
+num_steps = args.sim_length
+num_frames_per_step = 10
+print(f"Running MD simulation at {temperature_K:.1f} K, with system size {supercell_size}")
 
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-import numpy as np
-
-from ase import Atoms
-from ase.calculators.lj import LennardJones
-from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
-from ase.md.verlet import VelocityVerlet
-from ase import units
-
-from ase.visualize.plot import plot_atoms
+#%%
 
 # Set up a cluster of argon atoms
 atoms = Atoms('Ar', positions=[[5, 5, 5]], cell=(10, 10, 10))
 
 plot_atoms(atoms, radii=0.3, rotation=('20x,25y,20z'))
-
-
 
 
 
@@ -62,15 +62,7 @@ atoms = bulk('Ar', 'sc', a=5.26, cubic=True) * supercell_size # Create a 4x4x4 s
 
 plot_atoms(atoms, radii=0.3, rotation=('20x,25y,20z'))
 plt.savefig('argon_crystal.png')
-
-
-
-
-
 plt.close('all')
-
-
-
 
 
 import numpy as np
@@ -78,9 +70,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 
 
-
-
-
+#%%
 
 # Define Lennard-Jones parameters
 epsilon = 0.0103  # Potential depth in eV
@@ -101,7 +91,8 @@ dyn = VelocityVerlet(atoms, 2.5 * units.fs)  # Time step is 2.5 fs
 
 # Setup the trajectory writer
 trajectory_filename = f'argon_trajectory_long_{int(temperature_K)}K.traj'
-traj = Trajectory(trajectory_filename, 'w', atoms)
+traj_dir = os.path.join(args.root, 'dataset', trajectory_filename)
+traj = Trajectory(traj_dir, 'w', atoms)
 
 # Attach the trajectory to the dynamics
 dyn.attach(traj.write, interval=1)
@@ -142,14 +133,7 @@ plt.ylabel('Frequency')
 plt.tight_layout()
 plt.show()
 
-
-
-
-
-# plot_atoms(atoms, radii=0.3, rotation=('20x,25y,20z'))
-
-
-
+#%%
 
 
 from ase.io.trajectory import Trajectory
@@ -157,8 +141,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Load the trajectory
-trajectory_filename = f'argon_trajectory_warp_{int(temperature_K)}K.traj'
-traj = Trajectory(trajectory_filename)
+# trajectory_filename = f'argon_trajectory_warp_{int(temperature_K)}K.traj'
+traj = Trajectory(traj_dir)
 
 # List to store kinetic energies of each atom for all frames
 kinetic_energies = []

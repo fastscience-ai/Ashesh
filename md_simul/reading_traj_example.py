@@ -11,17 +11,27 @@
 
 # %%
 import os
+import argparse
 import numpy as np
 import ase
 import ase.io
-# Input
-os.chdir('/scratch/x2895a03/research/md-diffusion/Ashesh')
-temperature = '1000K'
-trajectory_filename = f'argon_trajectory_long_{temperature}.traj'
+
+# Parameters for data convert
+parser = argparse.ArgumentParser(description='MD simulation of Argon atoms')
+parser.add_argument('--temperature', type=float, default=300.0, help='Temperature in Kelvin')
+parser.add_argument('--system_size', type=int, default=5, help='Size of the supercell')
+parser.add_argument('--sim_length', type=int, default=20000, help='Number of steps')
+parser.add_argument('--root', type=str, default="/home/seunghoon/Ashesh")
+args = parser.parse_args()
+
+os.chdir(args.root)
+temperature = args.temperature
+trajectory_filename = f'argon_trajectory_long_{int(temperature)}K.traj'
+traj_dir = os.path.join(args.root, 'dataset', trajectory_filename)
 
 
 # %%
-ase_traj = ase.io.read(trajectory_filename, index=':')
+ase_traj = ase.io.read(traj_dir, index=':')
 # %%
 # print the first frame
 # get atomic positions, cell, and atomic numbers
@@ -53,7 +63,7 @@ for i in range(0,  len(ase_traj)):
 out = np.asarray(output)
 d1,d2,d3 = np.shape(out)
 print(d1,d2,d3) #500001 64 9
-time_length = 10000
+time_length = args.sim_length
 oo = np.shape(out[:-1])
 print(oo)
 input_ = np.reshape(out[:-1], (int(oo[0]/time_length),(time_length),oo[1],oo[2])) #ValueError: cannot reshape array of size 288000576 into shape (5000,100,64,9)
@@ -61,8 +71,13 @@ ii = np.shape(out[1:])
 print(ii)
 output_ = np.reshape(out[1:,:,:], (int(ii[0]/time_length),(time_length),ii[1],ii[2]))
 print(np.shape(input_), np.shape(output_))
-np.save(f"input_long_{temperature}.npy", input_)
-np.save(f"output_long.npy_{temperature}", output_)
+
+xs_dir = os.path.join(args.root, 'dataset', f'input_{int(temperature)}.npy')
+ys_dir = os.path.join(args.root, 'dataset', f'output_{int(temperature)}.npy')
+
+np.save(xs_dir, input_)
+np.save(ys_dir, output_)
+
 print(np.shape(output_), np.shape(input_))
    # print("Postion\n",ase_traj[i].positions)
    # print("Force\n", ase_traj[i].get_forces)
@@ -78,5 +93,3 @@ for i in range(0, len(ase_traj)):
 
     if i >= 3:
         break
-
-# %%
