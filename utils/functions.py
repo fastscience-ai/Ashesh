@@ -14,7 +14,7 @@ from typing import List, Dict, Tuple, Set, Union, Optional, Any, Callable
 from .args import get_parser
 
 parser = get_parser()
-args = parser.parse_args()
+args = parser.parse_args([])
 
 import math
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -86,6 +86,40 @@ def get_loss_cond(model, x_0, t, label_batch, temps=None):  #???
     # mse_loss(noise, noise_pred , wavenum_init, lamda_reg)
 
 
+def get_loss_cond_orig(model, x_0, t, label_batch, temps=None):  #???
+    x_noisy, noise = forward_diffusion_sample(x_0, t, device)
+    x_noisy = x_noisy.unsqueeze(1)
+    noise = noise.unsqueeze(1)
+    # if temps is not None:
+    #     temps = temps.reshape(*temps.shape, 1, 1, 1).expand(*temps.shape, 1, 64, 1)
+    #     x_0 = torch.cat([x_0, temps], dim=-1)
+    noise_pred = model(x_noisy, x_0, t, temps)
+    out = x_noisy-noise_pred
+
+    pos_loss = mse_loss(out[..., :3], label_batch[..., :3], wavenum_init, lamda_reg)
+    vel_loss = mse_loss(out[..., -3:], label_batch[..., -3:], wavenum_init, lamda_reg)
+    force_loss = mse_loss(out[..., 3:-3], label_batch[..., 3:-3], wavenum_init, lamda_reg)
+    
+    return pos_loss + vel_loss * 10 + force_loss
+    
+    #mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
+
+
+def get_loss_cond_diff(model, x_0, t, label_batch, temps=None):  #???
+    x_noisy, noise = forward_diffusion_sample(x_0, t, device)
+    x_noisy = x_noisy.unsqueeze(1)
+    noise = noise.unsqueeze(1)
+
+    noise_pred = model(x_noisy, x_0, t, temps)
+    difference = label_batch - x_0
+
+    pos_loss = mse_loss(difference[..., :3], noise_pred[..., :3], wavenum_init, lamda_reg)
+    vel_loss = mse_loss(difference[..., -3:], noise_pred[..., -3:], wavenum_init, lamda_reg)
+    force_loss = mse_loss(difference[..., 3:-3], noise_pred[..., 3:-3], wavenum_init, lamda_reg)
+    
+    return pos_loss + vel_loss * 10 + force_loss
+
+
 def get_loss_cond_rev(model, x_0, t, label_batch, temps=None):  
     # add noise to GT data
     x_noisy, noise = forward_diffusion_sample(label_batch, t, device)
@@ -97,6 +131,14 @@ def get_loss_cond_rev(model, x_0, t, label_batch, temps=None):
     # and make the model to predict the noise wirh [x_K, noised_x_K+1]
     noise_pred = model(x_noisy, x_0, t, temps)
     return mse_loss(noise_pred, noise, wavenum_init, lamda_reg)
+
+
+def get_loss_cond_direct(model, x_0, t, label_batch, temps=None):  
+    x_noisy, noise = forward_diffusion_sample(label_batch, t, device)
+    x_noisy = x_noisy.unsqueeze(1)
+
+    output = model(x_noisy, x_0, t, temps)
+    return mse_loss(output, label_batch, wavenum_init, lamda_reg)
 
 
 def get_loss_cond_pos(model, x_0, t, label_batch, temps=None):  #???
@@ -121,18 +163,6 @@ def get_loss_cond_pos(model, x_0, t, label_batch, temps=None):  #???
 
     return pos_loss + vel_loss * 0.5
 
-
-def get_loss_cond_diff(model, x_0, t, label_batch, temps=None):  #???
-    x_noisy, noise = forward_diffusion_sample(x_0, t, device)
-    x_noisy = x_noisy.unsqueeze(1)
-    noise = noise.unsqueeze(1)
-    if temps is not None:
-        temps = temps.reshape(*temps.shape, 1, 1, 1).expand(*temps.shape, 1, 64, 1)
-        x_0 = torch.cat([x_0, temps], dim=-1)
-    noise_pred = model(x_noisy, x_0, t)
-    difference = label_batch - x_0[..., :9]
-    
-    return mse_loss(difference, noise_pred , wavenum_init, lamda_reg)
 
 
 def RK4_sampler(model, x_noisy, cond, tt):
@@ -476,6 +506,18 @@ def normalize_md(x):
                  x[index_1,index_2,i] = (x[index_1,index_2,i]-mean_list[i])/(std_list[i])
     #print(np.amax(x), np.amin(x), mean_list, std_list)
     return x, mean_list, std_list
+
+
+def normalize_md_rev(x):
+    means = np.mean(x, axis=0, keepdims=True)
+    sigmas = np.std(x, axis=0, keepdims=True)
+
+    # normalize pos
+    x[..., :3] = (x[..., :3] - means[..., :3]) / sigmas[..., :3]
+    means[..., 3:] = 0.
+    sigmas[..., 3:] = 1.
+
+    return x, means, sigmas
 
 
 def denormalize_md(x, mean_list, std_list):

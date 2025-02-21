@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J ACDC
+#SBATCH -J MDMD_multi
 #SBATCH -p eme_h200nv_8
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -20,13 +20,13 @@ cd $WORKSPACE_PATH
 
 echo "START"
 
-srun python $WORKSPACE_PATH/main_md_multi.py \
- --how_to_sample "direct" \
- --num_epochs 2501 \
- --save_interval 50 \
- --learning_rate 1e-3 \
- --temperature 1000 \
- --t_selection 1000 \
+srun python $WORKSPACE_PATH/main_md_lazy.py\
+ --how_to_sample "one_step_diff"\
+ --num_epochs 2501\
+ --save_interval 50\
+ --temperature 300 500 1000 \
+ --t_selection 300 500 1000 \
  --t_to_simulate 1000
+
 
 echo "DONE"

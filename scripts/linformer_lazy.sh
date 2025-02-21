@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH -J sh_test_md_egnn_traj
-#SBATCH -p cas_v100nv_8
+#SBATCH -J MDMD_one
+#SBATCH -p eme_h200nv_8
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
@@ -20,6 +20,13 @@ cd $WORKSPACE_PATH
 
 echo "START"
 
-srun python $WORKSPACE_PATH/main_md_egnn.py --exp_name egnn_3layer_traj_lr_3e-4
+srun python $WORKSPACE_PATH/main_md_lazy.py\
+ --how_to_sample "one_step_diff"\
+ --num_epochs 2501\
+ --save_interval 50\
+ --temperature 1000 \
+ --t_selection 1000 \
+ --t_to_simulate 1000
+
 
 echo "DONE"

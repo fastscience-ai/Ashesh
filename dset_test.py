@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 parser = get_parser()
 args = parser.parse_args([])
+args.do_norm = False
 print(args.root, args.temperature, args.temperature[0])
 
 # dataset selection
@@ -57,6 +58,27 @@ print(TRAIN_SIZE, TEST_SIZE)
 print(mean_list_x)
 print("sampler", next_frame_sampler)
 print("loss_calculator", loss_calculator)
+
+
+#%%
+
+print(torch.mean(tr_x[0], dim=1), torch.std(tr_x[0], dim=1))
+print(torch.mean(tr_x[-1], dim=1), torch.std(tr_x[-1], dim=1))
+dx = torch.sqrt(torch.sum((te_x[1] - te_x[0])[..., :3]**2, dim=-1))
+v = torch.sqrt(torch.sum(te_y[0][..., -3:]**2, dim=-1))
+print(torch.mean(v / dx))
+
+
+#%%
+from ase import units
+
+print(1/(units.fs * 2.5))
+print(1/2.4557)
+
+#%%
+torch.mean(tr_x, dim=0, keepdim=True).shape
+
+
 
 #%%
 

@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .functions import *
+from ase import units
 
 
 
@@ -133,7 +134,7 @@ def argon_dataset_rev(args):
     batch_size = args.batch_size
     temp_ = args.temperature
     n_bunch = args.n_bunch # how much previous frames to use
-    n_offset = args.n_offset # from how much distant frames to predict
+    n_offset = int(args.n_offset - 1) # from how much distant frames to predict
 
     # gather dset per temperature
     assert isinstance(temp_, list), "Temperature should be a list"
@@ -163,12 +164,15 @@ def argon_dataset_rev(args):
         # reshape
         d1,d2,d3 = np.shape(y_tensor)
         
-        x_tensor_norm, mean_x, std_x = normalize_md(x_tensor)
+        if args.do_norm : 
+            x_tensor_norm, mean_x, std_x = normalize_md(x_tensor)
+            y_tensor_norm, mean_y, std_y = normalize_md(y_tensor)
+        else:
+            x_tensor_norm, mean_x, std_x = normalize_md_rev(x_tensor)
+            y_tensor_norm, mean_y, std_y = normalize_md_rev(y_tensor)
         x_tensor_norm=np.reshape(x_tensor_norm, [quotient,n_bunch,d2,d3])
         x_tensor_norm=torch.from_numpy(x_tensor_norm)
 
-    
-        y_tensor_norm, mean_y, std_y = normalize_md(y_tensor)
         y_tensor_norm=np.reshape(y_tensor_norm, [quotient,n_bunch,d2,d3]) 
         y_tensor_norm=torch.from_numpy(y_tensor_norm)
 

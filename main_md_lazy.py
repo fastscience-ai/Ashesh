@@ -15,13 +15,13 @@ from torch.utils.data import DataLoader, TensorDataset
 #%%
 
 parser = get_parser()
-args = parser.parse_args([])
+args = parser.parse_args()
 print(args.root, args.temperature, args.temperature[0])
 
 # dataset selection
 dset_generator = None
-temp_ = args.temperature
-use_temp_embed = len(temp_) >= 1
+tmep_ = args.temperature
+use_temp_embed = len(tmep_) >= 1
 # if len(temp_list) == 0:
 #     dset_generator = argon_dataset
 # elif len(temp_list) >= 1:
@@ -34,14 +34,11 @@ dset_generator = argon_dataset_rev
 loss_calculator = None
 next_frame_sampler = None
 if args.how_to_sample == "one_step":
-    loss_calculator = get_loss_cond
+    loss_calculator = get_loss_cond_orig
     next_frame_sampler = sample_one_step
-elif args.how_to_sample == "next_frame":
-    loss_calculator = get_loss_cond_rev
-    next_frame_sampler = sample_next_frame
-elif args.how_to_sample == "direct":
-    loss_calculator = get_loss_cond_direct
-    next_frame_sampler = None
+elif args.how_to_sample == "one_step_diff":
+    loss_calculator = get_loss_cond_diff
+    next_frame_sampler = sample_one_step_diff
 else:
     raise ValueError("Invalid choice of sampling method! Choose one_step or next_frame")
 
@@ -49,7 +46,6 @@ tr_x, te_x, tr_y, te_y, \
 mean_list_x, std_list_x, mean_list_y, std_list_y, \
 TRAIN_SIZE, TEST_SIZE, tr_ts, te_ts \
      = dset_generator(args)
-
 #%%
 print(te_x.shape, tr_x.shape)
 print(tr_ts.shape)
@@ -77,13 +73,13 @@ if num_epochs > 10:
 
 if not args.exp_name:
     exp_name = f"md_ep{num_epochs}_one_step_noise_\
-single_temp_{args.temperature}K_T{args.timesteps}_lr{learning_rate}_orig_{args.how_to_sample}"
+single_temp_{args.temperature}K_T{args.timesteps}_lr{learning_rate}_lazy_{args.how_to_sample}"
 else:
     exp_name = args.exp_name
 print("exp name : ", exp_name)
 
-# wandb.init(project='diffusionMD')
-# wandb.run.name = exp_name
+wandb.init(project='diffusionMD')
+wandb.run.name = exp_name
 
 model_save_path = os.path.join('./', args.result_path, exp_name)
 if not os.path.exists(model_save_path):
@@ -106,51 +102,51 @@ if lr_milestones:
     scheduler = MultiStepLR(optimizer, milestones=lr_milestones, gamma=args.lr_gamma)
 
 #%%
-# iter_cnt_total = 0
-# for epoch in range(0, num_epochs):  # loop over the dataset multiple times
-#     running_loss = 0.0
-#     mean_loss = 0.0
-#     iter_cnt_per_epoch = 0
+iter_cnt_total = 0
+for epoch in range(0, num_epochs):  # loop over the dataset multiple times
+    running_loss = 0.0
+    mean_loss = 0.0
+    iter_cnt_per_epoch = 0
 
-#     trainN=tr_x.shape[0]
+    trainN=tr_x.shape[0]
     
-#     for step in range(0,trainN-batch_size,batch_size):
-#         # get the inputs; data is a list of [inputs, labels]
-#         indices = np.random.permutation(np.arange(start=step, stop=step+batch_size))
-#         input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
-#         input_temp = tr_ts[indices]
+    for step in range(0,trainN-batch_size,batch_size):
+        # get the inputs; data is a list of [inputs, labels]
+        indices = np.random.permutation(np.arange(start=step, stop=step+batch_size))
+        input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
+        input_temp = tr_ts[indices]
 
-#         t = torch.randint(1, T, (1,), device=device).long() 
-#         t = t.repeat(batch_size)
-#         #print(t)
+        t = torch.randint(1, T, (1,), device=device).long() 
+        t = t.repeat(batch_size)
+        #print(t)
 
-#         x_0 = input_batch.float().to(device)
-#         label_batch = label_batch.float().to(device)
+        x_0 = input_batch.float().to(device)
+        label_batch = label_batch.float().to(device)
         
-#         # zero the parameter gradients
-#         optimizer.zero_grad()      
+        # zero the parameter gradients
+        optimizer.zero_grad()      
 
-#         loss = loss_calculator(model, input_batch.float().cuda(), t,
-#                              label_batch.float().cuda(), input_temp.float().cuda())
+        loss = loss_calculator(model, input_batch.float().cuda(), t,
+                             label_batch.float().cuda(), input_temp.float().cuda())
 
-#         loss.backward()
-#         optimizer.step()
-#         wandb.log({'loss': loss}, step=iter_cnt_total)
-#         print('Epoch',epoch, 'Step',step, 'Loss',loss)
-#         mean_loss += loss.item()
-#         iter_cnt_per_epoch += 1
-#         iter_cnt_total += 1
+        loss.backward()
+        optimizer.step()
+        wandb.log({'loss': loss}, step=iter_cnt_total)
+        print('Epoch',epoch, 'Step',step, 'Loss',loss)
+        mean_loss += loss.item()
+        iter_cnt_per_epoch += 1
+        iter_cnt_total += 1
 
-#         # remove gradient info
-#         # del x_0, label_batch, x_noisy, noise, u, loss
-#     if scheduler:
-#         scheduler.step()
-#     mean_loss /= iter_cnt_per_epoch
-#     print('Epoch',epoch, 'Mean Loss',mean_loss)
-#     wandb.log({'mean_loss': mean_loss}, step=iter_cnt_total)
-#     if epoch % save_interval == 0:
-#         torch.save(model.state_dict(), os.path.join(model_save_path, str(epoch+1)+'.pt'))
-#         print('Model saved')
+        # remove gradient info
+        # del x_0, label_batch, x_noisy, noise, u, loss
+    if scheduler:
+        scheduler.step()
+    mean_loss /= iter_cnt_per_epoch
+    print('Epoch',epoch, 'Mean Loss',mean_loss)
+    wandb.log({'mean_loss': mean_loss}, step=iter_cnt_total)
+    if epoch % save_interval == 0:
+        torch.save(model.state_dict(), os.path.join(model_save_path, str(epoch+1)+'.pt'))
+        print('Model saved')
 
 #%%
 
@@ -183,40 +179,36 @@ with torch.no_grad():
         print('time step',k)   
         if (k==0):
             for ens in range (0, Nens):
-                if args.how_to_sample == "one_step":
+                if "one_step" in args.how_to_sample:
                     #tt = torch.randint(0, T, (1,), device=device).long() # diffusion time step--> random tt 
                     tt =  torch.tensor([T-1], device=device).long() # 이제 randn이니까?
                 else:
                     tt =  torch.tensor([T-1], device=device).long()
                 x_0 = te_x[0,:,:,:].reshape([1,1,64,9]).float().to(device)
                 # generate from pure noise : 
-                x_noisy = torch.randn_like(x_0)
+                x_noisy, noise = forward_diffusion_sample(x_0, tt, device)
+                x_noisy = x_noisy.unsqueeze(1)
                 #print(x_noisy.device, x_0.device, tt.device)
                 cond = x_0
                 # sample
-                if next_frame_sampler:
-                    u = next_frame_sampler(model, x_noisy, x_0, tt, temp_cond)
-                else:
-                    u = model(x_noisy, x_0, tt, temp_cond)
+                u = next_frame_sampler(model, x_noisy, x_0, tt, temp_cond)
                 pred[k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
         else:
             mean_traj = torch.from_numpy(np.mean(pred [k-1,:,:,:,:],0).reshape([1,1,64,9])).float().to(device) 
             # choose random ensemble? error 누적될수도
             single_traj = torch.from_numpy(pred [k-1,0,:,:,:].reshape([1,1,64,9])).float().to(device)
             for ens in range (0, Nens):
-                if args.how_to_sample == "one_step":
+                if "one_step" in args.how_to_sample:
                     # tt = torch.randint(0, T, (1,), device=device).long() # diffusion time step--> random tt 
                     tt =  torch.tensor([T-1], device=device).long()
                 else:
                     tt =  torch.tensor([T-1], device=device).long()
                 # generate from pure noise : 
-                x_noisy = torch.randn_like(x_0)
+                x_noisy, noise = forward_diffusion_sample(single_traj, tt, device)
+                x_noisy = x_noisy.unsqueeze(1)
                 cond = single_traj
                 # sample
-                if next_frame_sampler:
-                    u = next_frame_sampler(model, x_noisy, single_traj, tt, temp_cond)
-                else:
-                    u = model(x_noisy, single_traj, tt, temp_cond)
+                u = next_frame_sampler(model, x_noisy, single_traj, tt, temp_cond)
                 pred[k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
 #%%
 print(pred.shape, te_y.shape, np.array(mean_list_y).shape) #(100, 20, 1, 64, 9) torch.Size([100, 1, 64, 9])
@@ -224,7 +216,7 @@ print(pred.shape, te_y.shape, np.array(mean_list_y).shape) #(100, 20, 1, 64, 9) 
 print(pred.shape, te_y.shape) #(100, 20, 1, 64, 9) torch.Size([100, 1, 64, 9])
 pred_denorm = denormalize_md_pred(pred, mean_list_y, std_list_y)
 te_y_denorm = denormalize_md(te_y, mean_list_y, std_list_y)
-np.savez(os.path.join(args.result_path, f'./single_temp/{exp_name}_T'),pred,te_y_denorm[:Nsteps])
+np.savez(os.path.join(args.result_path, f'./single_temp/{exp_name}'),pred,te_y_denorm[:Nsteps])
 print('Saved Predictions')
 
 # %%
