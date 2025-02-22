@@ -17,35 +17,64 @@ args = parser.parse_args([])
 # posterior_variance = betas * (1. - alphas_cumprod_prev) / (1. - alphas_cumprod)
 
 
-def sample_one_step(model, x_noisy, condition, t, temp_cond):
+# def sample_one_step(model, x_noisy, condition, t, temp_cond):
 
-    with torch.no_grad():
-        x_noisy = x_noisy.to(device)
-        condition = condition.to(device)
-        t = t.to(device)
-        temp_cond = temp_cond.to(device)
+#     with torch.no_grad():
+#         x_noisy = x_noisy.to(device)
+#         condition = condition.to(device)
+#         t = t.to(device)
+#         temp_cond = temp_cond.to(device)
 
-        # (x_noisy-noise_pred) = label_batch 
+#         # (x_noisy-noise_pred) = label_batch 
+#         # model_pred = X(K+1, 0) - X(K, t)
+#         noise_pred = model(x_noisy, condition, t, temp_cond)
+#         # X(K, t) - model_pred =X(K+1, 0)
+#         # X(K, t) - X(K+1,0) = model_pred = -dX 
+#         # will be revised: X(K+1, 0) - X(K, t) = model_pred = dX 
+#         return x_noisy + noise_pred # 
+#         # return x_noisy + noise_pred # TODO: Sign should be considered
 
-        noise_pred = model(x_noisy, condition, t, temp_cond)
+cell_vector = torch.tensor([[[21.04, 0.0, 0.0], [0.0, 21.04, 0.0], [0.0, 0.0, 21.04]]])
 
-        return x_noisy - noise_pred
+def sample_one_step_diff(model, 
+        loss_definition: str,
+        X_noisy: torch.Tensor, 
+        X_0: torch.Tensor, 
+        t: torch.Tensor, 
+        temp_cond: torch.Tensor,
+        lattice: torch.Tensor):
 
+  
+        with torch.no_grad():
+            x_noisy = x_noisy.to(device)
+            X_noisy = X_noisy.to(device)
+            X_0 = X_0.to(device)
+            t = t.to(device)
+            temp_cond = temp_cond.to(device)
 
-def sample_one_step_diff(model, x_noisy, condition, t, temp_cond):
+            # noise_pred = model(x_noisy, x_0, t, temps)
+            # difference = label_batch - x_0
+            # model_pred = X(K+1, 0) - X(K, 0)
 
-    with torch.no_grad():
-        x_noisy = x_noisy.to(device)
-        condition = condition.to(device)
-        t = t.to(device)
-        temp_cond = temp_cond.to(device)
+            case 'one_step':
+                
+                X_t_orig = X_noisy[..., :3] # X(K,t) positoin
 
-        # noise_pred = model(x_noisy, x_0, t, temps)
-        # difference = label_batch - x_0
+            case 'one_step_diff':
+                
+                X_t_orig = X_0[..., :3] # X(K,0) positoin
+                
+            noise_pred = model(X_noisy, X_0, t, temp_cond)
 
-        noise_pred = model(x_noisy, condition, t, temp_cond)
-
-        return condition + noise_pred
+            X_next_pred, dX, V_pred, F_pred = model_pbc_call(model,
+                            X_t_orig,
+                            X_noisy,
+                            X_0,
+                            t,
+                            temp_cond,
+                            lattice)
+        # noiseX_next_pred # _pred = +dX
+        return X_next_pred #condition + noise_pred # X + dx
         
 
 def sample_next_frame(model, x_noisy, condition, tt, temp_cond):

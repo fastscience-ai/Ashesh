@@ -31,7 +31,41 @@ wavenum_init=0 #10
 wavenum_init_ydir=0 #10
 
 #cell_vector = torch.tensor([[[21.04, 0.0, 0.0], [0.0, 21.04, 0.0], [0.0, 0.0, 21.04]]], device=device)
-cell_vector = torch.tensor([[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]], device=device)
+#cell_vector = torch.tensor([[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]], device=device)
+
+def model_pbc_call(model, 
+        X_t_orig: torch.Tensor, # X(K,0) or X(K,t)
+        X_noisy: torch.Tensor,  # noise + X_0
+        X_0: torch.Tensor,      # X_0
+        t: torch.Tensor,
+        temp: torch.Tensor,
+        lattice:torch.Tensor):
+        #ca):: str
+    
+    # Not implimented yet
+
+    device = X_t.device
+    
+    X_noisy_wrappedd = pbc_coord(X_noisy, lattice)
+    pred = model(X_noisy_wrappeedd, X_0, t, temps)
+
+    dX = pred[:, 0:3]
+
+    V_pred = torch.zeros_like(X_t_orig, device=device)
+    F_pred = torch.zeros_like(X_t_orig, device=device)
+    
+    # dx = X(K+1, 0) - X(K, 0) x_t_orig : pred pbc X
+    # dx = X(K+1, 0) - X(K, t) x_t_orig : ?
+
+    # X(K+1,0) = X(K,0):X_t_orig + dX
+    # X(K+1,0) = X(K,t):X_t_orig + dX 
+    
+    # dX = pred
+    
+    new_coord = X_t_orig + dX
+
+    return new_coord, dX, V_pred, F_pred
+    #return new_coord
 
 def mse_loss(output, target, wavenum_init,lamda_reg):
     loss1 = F.mse_loss(output,target) 
