@@ -31,7 +31,39 @@ wavenum_init=0 #10
 wavenum_init_ydir=0 #10
 
 #cell_vector = torch.tensor([[[21.04, 0.0, 0.0], [0.0, 21.04, 0.0], [0.0, 0.0, 21.04]]], device=device)
-cell_vector = torch.tensor([[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]], device=device)
+#cell_vector = torch.tensor([[[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]], device=device)
+
+def model_pbc_call(model, 
+        X_t_orig: torch.Tensor, # X(K,0) or X(K,t)
+        X_noisy: torch.Tensor,  # noise + X_0
+        X_0: torch.Tensor,      # X_0
+        t: torch.Tensor,
+        temp: torch.Tensor,
+        lattice:torch.Tensor):
+
+
+    device = X_t_orig.device
+    
+    X_noisy_wrapped = pbc_coord(X_noisy, lattice)
+    pred = model(X_noisy_wrapped, X_0, t, temp)
+
+    dX = pred[:, 0:3]
+
+    V_pred = torch.zeros_like(X_t_orig, device=device)
+    F_pred = torch.zeros_like(X_t_orig, device=device)
+    
+    # dx = X(K+1, 0) - X(K, 0) x_t_orig : pred pbc X
+    # dx = X(K+1, 0) - X(K, t) x_t_orig : ?
+
+    # X(K+1,0) = X(K,0):X_t_orig + dX
+    # X(K+1,0) = X(K,t):X_t_orig + dX 
+    
+    # dX = pred
+    
+    X_next_pred = X_t_orig + dX
+
+    return X_next_pred, dX, V_pred, F_pred
+    #return new_coord
 
 def mse_loss(output, target, wavenum_init,lamda_reg):
     loss1 = F.mse_loss(output,target) 
@@ -86,51 +118,97 @@ def get_loss_cond(model, x_0, t, label_batch, temps=None):  #???
     # mse_loss(noise, noise_pred , wavenum_init, lamda_reg)
 
 
-def get_loss_cond_orig(model, x_0, t, label_batch, temps=None):  #???
-    x_noisy, noise = forward_diffusion_sample(x_0, t, device)
-    x_noisy = x_noisy.unsqueeze(1)
-    noise = noise.unsqueeze(1)
-    # if temps is not None:
-    #     temps = temps.reshape(*temps.shape, 1, 1, 1).expand(*temps.shape, 1, 64, 1)
-    #     x_0 = torch.cat([x_0, temps], dim=-1)
-    noise_pred = model(x_noisy, x_0, t, temps)
-    out = x_noisy-noise_pred
 
-    pos_loss = mse_loss(out[..., :3], label_batch[..., :3], wavenum_init, lamda_reg)
-    vel_loss = mse_loss(out[..., -3:], label_batch[..., -3:], wavenum_init, lamda_reg)
-    force_loss = mse_loss(out[..., 3:-3], label_batch[..., 3:-3], wavenum_init, lamda_reg)
+
+def get_loss_unified(model, 
+                    loss_definition:str,
+                    #X_t_orig: torch.Tensor, # X(K,0) or X(K,t)
+                    X_noisy: torch.Tensor,  # noise + X_0
+                    X_0: torch.Tensor,      # X_0
+                    X_next: torch.Tensor,
+                    t: torch.Tensor,
+                    temp: torch.Tensor,
+                    lattice:torch.Tensor):
+
+    device = X_0.device
+                    
+    # Cal noise
+    X_noisy, noise = forward_diffusion_sample(X_0, t, device)
+    X_noisy = X_noisy.unsqueeze(1)
+
+    # Model call by options 
+
+    match loss_definition:
     
-    return pos_loss + vel_loss * 100 + force_loss
+        case 'one_step':
+
+            X_t_orig = X_noisy[..., :3] # X(K,t) positoin
+
+        case 'one_step_diff':
+
+            X_t_orig = X_0[..., :3] # X(K,0) positoin
+            
+        case _:
+                
+            raise ValueError(f"Invalid loss definition: {loss_definition}")
+                
+    X_next_pred, dX, V_pred, F_pred = model_pbc_call(model,
+        X_t_orig,
+        X_noisy,
+        X_0,
+        t,
+        temp,
+        lattice)
+            
+    return  mse_loss(X_next, X_next_pred)
+
+
+
+# def get_loss_cond_orig(model, x_0, t, label_batch, temps=None):  #???
+#     x_noisy, noise = forward_diffusion_sample(x_0, t, device)
+#     x_noisy = x_noisy.unsqueeze(1)
+#     noise = noise.unsqueeze(1)
+#     # if temps is not None:
+#     #     temps = temps.reshape(*temps.shape, 1, 1, 1).expand(*temps.shape, 1, 64, 1)
+#     #     x_0 = torch.cat([x_0, temps], dim=-1)
+#     noise_pred = model(x_noisy, x_0, t, temps)
+#     out = x_noisy-noise_pred
+
+#     pos_loss = mse_loss(out[..., :3], label_batch[..., :3], wavenum_init, lamda_reg)
+#     vel_loss = mse_loss(out[..., -3:], label_batch[..., -3:], wavenum_init, lamda_reg)
+#     force_loss = mse_loss(out[..., 3:-3], label_batch[..., 3:-3], wavenum_init, lamda_reg)
     
-    #mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
-
-
-def get_loss_cond_diff(model, x_0, t, label_batch, temps=None):  #???
-    x_noisy, noise = forward_diffusion_sample(x_0, t, device)
-    x_noisy = x_noisy.unsqueeze(1)
-    noise = noise.unsqueeze(1)
-
-    noise_pred = model(x_noisy, x_0, t, temps)
-    difference = label_batch - x_0
-
-    pos_loss = mse_loss(difference[..., :3], noise_pred[..., :3], wavenum_init, lamda_reg)
-    vel_loss = mse_loss(difference[..., -3:], noise_pred[..., -3:], wavenum_init, lamda_reg)
-    force_loss = mse_loss(difference[..., 3:-3], noise_pred[..., 3:-3], wavenum_init, lamda_reg)
+#     return pos_loss + vel_loss * 10 + force_loss
     
-    return pos_loss + vel_loss * 100 + force_loss
+#     #mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
 
 
-def get_loss_cond_rev(model, x_0, t, label_batch, temps=None):  
-    # add noise to GT data
-    x_noisy, noise = forward_diffusion_sample(label_batch, t, device)
-    x_noisy = x_noisy.unsqueeze(1)
-    noise = noise.unsqueeze(1)
-    # if temps is not None:
-    #     temps = temps.reshape(*temps.shape, 1, 1, 1).expand(*temps.shape, 1, 64, 1)
-    #     x_0 = torch.cat([x_0, temps], dim=-1)
-    # and make the model to predict the noise wirh [x_K, noised_x_K+1]
-    noise_pred = model(x_noisy, x_0, t, temps)
-    return mse_loss(noise_pred, noise, wavenum_init, lamda_reg)
+# def get_loss_cond_diff(model, x_0, t, label_batch, temps=None):  #???
+#     x_noisy, noise = forward_diffusion_sample(x_0, t, device)
+#     x_noisy = x_noisy.unsqueeze(1)
+#     noise = noise.unsqueeze(1)
+
+#     noise_pred = model(x_noisy, x_0, t, temps)
+#     difference = label_batch - x_0
+
+#     pos_loss = mse_loss(difference[..., :3], noise_pred[..., :3], wavenum_init, lamda_reg)
+#     vel_loss = mse_loss(difference[..., -3:], noise_pred[..., -3:], wavenum_init, lamda_reg)
+#     force_loss = mse_loss(difference[..., 3:-3], noise_pred[..., 3:-3], wavenum_init, lamda_reg)
+    
+#    return pos_loss + vel_loss * 10 + force_loss
+
+
+# def get_loss_cond_rev(model, x_0, t, label_batch, temps=None):  
+#     # add noise to GT data
+#     x_noisy, noise = forward_diffusion_sample(label_batch, t, device)
+#     x_noisy = x_noisy.unsqueeze(1)
+#     noise = noise.unsqueeze(1)
+#     # if temps is not None:
+#     #     temps = temps.reshape(*temps.shape, 1, 1, 1).expand(*temps.shape, 1, 64, 1)
+#     #     x_0 = torch.cat([x_0, temps], dim=-1)
+#     # and make the model to predict the noise wirh [x_K, noised_x_K+1]
+#     noise_pred = model(x_noisy, x_0, t, temps)
+#     return mse_loss(noise_pred, noise, wavenum_init, lamda_reg)
 
 
 def get_loss_cond_direct(model, x_0, t, label_batch, temps=None):  
