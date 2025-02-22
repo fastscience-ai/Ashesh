@@ -56,6 +56,8 @@ def sample_one_step_diff(model,
             # difference = label_batch - x_0
             # model_pred = X(K+1, 0) - X(K, 0)
 
+        match loss_definition:
+            
             case 'one_step':
                 
                 X_t_orig = X_noisy[..., :3] # X(K,t) positoin
