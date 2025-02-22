@@ -66,15 +66,19 @@ def sample_one_step_diff(model,
                 
                 X_t_orig = X_0[..., :3] # X(K,0) positoin
                 
-            noise_pred = model(X_noisy, X_0, t, temp_cond)
-
-            X_next_pred, dX, V_pred, F_pred = model_pbc_call(model,
+            case _:
+                
+                raise ValueError(f"Invalid loss definition: {loss_definition}")
+                
+        
+        X_next_pred, dX, V_pred, F_pred = model_pbc_call(model,
                             X_t_orig,
                             X_noisy,
                             X_0,
                             t,
                             temp_cond,
                             lattice)
+        
         # noiseX_next_pred # _pred = +dX
         return X_next_pred #condition + noise_pred # X + dx
         

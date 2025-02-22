@@ -147,8 +147,11 @@ def get_loss_unified(model,
         case 'one_step_diff':
 
             X_t_orig = X_0[..., :3] # X(K,0) positoin
-
-
+            
+        case _:
+                
+            raise ValueError(f"Invalid loss definition: {loss_definition}")
+                
     X_next_pred, dX, V_pred, F_pred = model_pbc_call(model,
         X_t_orig,
         X_noisy,
