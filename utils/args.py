@@ -9,14 +9,14 @@ def get_parser():
     parser.add_argument("--model-type", type=str, default="egnn")
 
     # dataset args
-    parser.add_argument('--temperature', type=int, nargs='+', default=[300])
+    parser.add_argument('--temperature', type=int, nargs='+', default=[1000])
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--n_bunch", type=int, default=1)
     parser.add_argument("--n_offset", type=int, default=1)
     parser.add_argument("--do_norm", type=bool, default=False)
     #parser.add_argument('--temperature', type=int, default=1000)
-    parser.add_argument("--t_selection", type=int, nargs='+', default=[300])# [200, 300, 500] / 1000
-    parser.add_argument("--t_to_simulate", type=int, default=300)
+    parser.add_argument("--t_selection", type=int, nargs='+', default=[1000])# [200, 300, 500] / 1000
+    parser.add_argument("--t_to_simulate", type=int, default=1000)
 
     # experiment args
     parser.add_argument("--exp_name", type=str, default=None)
@@ -27,7 +27,7 @@ def get_parser():
 
     # how to do inference?
     parser.add_argument("--timesteps", type=int, default=300)
-    parser.add_argument("--how_to_sample", type=str, default="next_frame", choices=["one_step", "one_step_diff", "next_frame", "direct"])
+    parser.add_argument("--how_to_sample", type=str, default="one_step", choices=["one_step", "one_step_diff", "next_frame", "direct"])
 
     return parser
 

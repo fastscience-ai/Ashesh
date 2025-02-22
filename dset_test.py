@@ -55,7 +55,9 @@ TRAIN_SIZE, TEST_SIZE, tr_ts, te_ts \
 print(te_x.shape, tr_x.shape)
 print(tr_ts.shape)
 print(TRAIN_SIZE, TEST_SIZE)
+print(np.array(mean_list_x).shape)
 print(mean_list_x)
+print(std_list_x)
 print("sampler", next_frame_sampler)
 print("loss_calculator", loss_calculator)
 

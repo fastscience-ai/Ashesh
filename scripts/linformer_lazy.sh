@@ -22,6 +22,7 @@ echo "START"
 
 srun python $WORKSPACE_PATH/main_md_lazy.py\
  --how_to_sample "one_step_diff"\
+ --learning_rate 1e-4 \
  --num_epochs 2501\
  --save_interval 50\
  --temperature 1000 \

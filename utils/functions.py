@@ -100,7 +100,7 @@ def get_loss_cond_orig(model, x_0, t, label_batch, temps=None):  #???
     vel_loss = mse_loss(out[..., -3:], label_batch[..., -3:], wavenum_init, lamda_reg)
     force_loss = mse_loss(out[..., 3:-3], label_batch[..., 3:-3], wavenum_init, lamda_reg)
     
-    return pos_loss + vel_loss * 10 + force_loss
+    return pos_loss + vel_loss * 100 + force_loss
     
     #mse_loss((x_noisy-noise_pred), label_batch , wavenum_init, lamda_reg)
 
@@ -117,7 +117,7 @@ def get_loss_cond_diff(model, x_0, t, label_batch, temps=None):  #???
     vel_loss = mse_loss(difference[..., -3:], noise_pred[..., -3:], wavenum_init, lamda_reg)
     force_loss = mse_loss(difference[..., 3:-3], noise_pred[..., 3:-3], wavenum_init, lamda_reg)
     
-    return pos_loss + vel_loss * 10 + force_loss
+    return pos_loss + vel_loss * 100 + force_loss
 
 
 def get_loss_cond_rev(model, x_0, t, label_batch, temps=None):  
@@ -509,8 +509,8 @@ def normalize_md(x):
 
 
 def normalize_md_rev(x):
-    means = np.mean(x, axis=0, keepdims=True)
-    sigmas = np.std(x, axis=0, keepdims=True)
+    means = np.mean(x, axis=(0, 1), keepdims=True)
+    sigmas = np.std(x, axis=(0, 1), keepdims=True)
 
     # normalize pos
     x[..., :3] = (x[..., :3] - means[..., :3]) / sigmas[..., :3]
