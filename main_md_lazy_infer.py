@@ -19,28 +19,15 @@ args = parser.parse_args([])
 print(args.root, args.temperature, args.temperature[0])
 
 # dataset selection
-dset_generator = None
+dset_generator = argon_dataset_rev
 tmep_ = args.temperature
 use_temp_embed = len(tmep_) >= 1
-# if len(temp_list) == 0:
-#     dset_generator = argon_dataset
-# elif len(temp_list) >= 1:
-#     dset_generator = argon_dataset_mixed_temp
-# else:
-#     raise ValueError("Invalid temperature range")
-dset_generator = argon_dataset_rev
 
 # sampling strategy
-loss_calculator = None
-next_frame_sampler = None
-if args.how_to_sample == "one_step":
-    loss_calculator = get_loss_cond_orig
-    next_frame_sampler = sample_one_step
-elif args.how_to_sample == "one_step_diff":
-    loss_calculator = get_loss_cond_diff
-    next_frame_sampler = sample_one_step_diff
-else:
-    raise ValueError("Invalid choice of sampling method! Choose one_step or next_frame")
+loss_calculator = get_loss_unified
+next_frame_sampler = sample_one_step_unified
+loss_definition = args.how_to_sample
+
 
 tr_x, te_x, tr_y, te_y, \
 mean_list_x, std_list_x, mean_list_y, std_list_y, \
@@ -103,51 +90,51 @@ if lr_milestones:
     scheduler = MultiStepLR(optimizer, milestones=lr_milestones, gamma=args.lr_gamma)
 
 #%%
-# iter_cnt_total = 0
-# for epoch in range(0, num_epochs):  # loop over the dataset multiple times
-#     running_loss = 0.0
-#     mean_loss = 0.0
-#     iter_cnt_per_epoch = 0
+iter_cnt_total = 0
+for epoch in range(0, num_epochs):  # loop over the dataset multiple times
+    running_loss = 0.0
+    mean_loss = 0.0
+    iter_cnt_per_epoch = 0
 
-#     trainN=tr_x.shape[0]
+    trainN=tr_x.shape[0]
     
-#     for step in range(0,trainN-batch_size,batch_size):
-#         # get the inputs; data is a list of [inputs, labels]
-#         indices = np.random.permutation(np.arange(start=step, stop=step+batch_size))
-#         input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
-#         input_temp = tr_ts[indices]
+    for step in range(0,trainN-batch_size,batch_size):
+        # get the inputs; data is a list of [inputs, labels]
+        indices = np.random.permutation(np.arange(start=step, stop=step+batch_size))
+        input_batch, label_batch = tr_x[indices,:,:,:], tr_y[indices,:,:,:]
+        input_temp = tr_ts[indices]
 
-#         t = torch.randint(1, T, (1,), device=device).long() 
-#         t = t.repeat(batch_size)
-#         #print(t)
+        t = torch.randint(1, T, (1,), device=device).long() 
+        t = t.repeat(batch_size)
+        #print(t)
 
-#         x_0 = input_batch.float().to(device)
-#         label_batch = label_batch.float().to(device)
+        x_0 = input_batch.float().to(device)
+        label_batch = label_batch.float().to(device)
         
-#         # zero the parameter gradients
-#         optimizer.zero_grad()      
+        # zero the parameter gradients
+        optimizer.zero_grad()      
 
-#         loss = loss_calculator(model, input_batch.float().cuda(), t,
-#                              label_batch.float().cuda(), input_temp.float().cuda())
+        loss = loss_calculator(model, input_batch.float().cuda(), t,
+                             label_batch.float().cuda(), input_temp.float().cuda())
 
-#         loss.backward()
-#         optimizer.step()
-#         wandb.log({'loss': loss}, step=iter_cnt_total)
-#         print('Epoch',epoch, 'Step',step, 'Loss',loss)
-#         mean_loss += loss.item()
-#         iter_cnt_per_epoch += 1
-#         iter_cnt_total += 1
+        loss.backward()
+        optimizer.step()
+        wandb.log({'loss': loss}, step=iter_cnt_total)
+        print('Epoch',epoch, 'Step',step, 'Loss',loss)
+        mean_loss += loss.item()
+        iter_cnt_per_epoch += 1
+        iter_cnt_total += 1
 
-#         # remove gradient info
-#         # del x_0, label_batch, x_noisy, noise, u, loss
-#     if scheduler:
-#         scheduler.step()
-#     mean_loss /= iter_cnt_per_epoch
-#     print('Epoch',epoch, 'Mean Loss',mean_loss)
-#     wandb.log({'mean_loss': mean_loss}, step=iter_cnt_total)
-#     if epoch % save_interval == 0:
-#         torch.save(model.state_dict(), os.path.join(model_save_path, str(epoch+1)+'.pt'))
-#         print('Model saved')
+        # remove gradient info
+        # del x_0, label_batch, x_noisy, noise, u, loss
+    if scheduler:
+        scheduler.step()
+    mean_loss /= iter_cnt_per_epoch
+    print('Epoch',epoch, 'Mean Loss',mean_loss)
+    wandb.log({'mean_loss': mean_loss}, step=iter_cnt_total)
+    if epoch % save_interval == 0:
+        torch.save(model.state_dict(), os.path.join(model_save_path, str(epoch+1)+'.pt'))
+        print('Model saved')
 
 #%%
 

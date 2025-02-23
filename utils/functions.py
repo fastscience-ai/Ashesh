@@ -35,7 +35,7 @@ wavenum_init_ydir=0 #10
 
 def model_pbc_call(model, 
         X_t_orig: torch.Tensor, # X(K,0) or X(K,t)
-        X_noisy: torch.Tensor,  # noise + X_0
+        X_noisy: torch.Tensor,  # (1-\sqrt(a))noise +\sqrt(a)X_0
         X_0: torch.Tensor,      # X_0
         t: torch.Tensor,
         temp: torch.Tensor,
@@ -43,11 +43,14 @@ def model_pbc_call(model,
 
 
     device = X_t_orig.device
+
+    X_noisy_wrapped = torch.zeros_like(X_noisy, device=device)
     
-    X_noisy_wrapped = pbc_coord(X_noisy, lattice)
+    X_noisy_wrapped[..., :3] = pbc_coord(X_noisy[..., :3], lattice)
+    X_noisy_wrapped[..., 3:] = X_noisy[..., 3:]
     pred = model(X_noisy_wrapped, X_0, t, temp)
 
-    dX = pred[:, 0:3]
+    dX = pred[... , :3]
 
     V_pred = torch.zeros_like(X_t_orig, device=device)
     F_pred = torch.zeros_like(X_t_orig, device=device)
@@ -65,7 +68,7 @@ def model_pbc_call(model,
     return X_next_pred, dX, V_pred, F_pred
     #return new_coord
 
-def mse_loss(output, target, wavenum_init,lamda_reg):
+def mse_loss(output, target, wavenum_init = None,lamda_reg =None):
     loss1 = F.mse_loss(output,target) 
     return loss1
 
@@ -120,12 +123,10 @@ def get_loss_cond(model, x_0, t, label_batch, temps=None):  #???
 
 
 
-def get_loss_unified(model, 
+def one_step_loss_unified(model, 
                     loss_definition:str,
-                    #X_t_orig: torch.Tensor, # X(K,0) or X(K,t)
-                    X_noisy: torch.Tensor,  # noise + X_0
-                    X_0: torch.Tensor,      # X_0
-                    X_next: torch.Tensor,
+                    X_0: torch.Tensor,      # input_batch
+                    X_next: torch.Tensor,   # label_batch
                     t: torch.Tensor,
                     temp: torch.Tensor,
                     lattice:torch.Tensor):
@@ -148,6 +149,10 @@ def get_loss_unified(model,
 
             X_t_orig = X_0[..., :3] # X(K,0) positoin
             
+        case 'vdm':
+
+            X_noisy = forward_diffusion_sample(X_next, t, device)
+
         case _:
                 
             raise ValueError(f"Invalid loss definition: {loss_definition}")
@@ -159,8 +164,11 @@ def get_loss_unified(model,
         t,
         temp,
         lattice)
+
+    X_next_frame = torch.cat([X_next_pred, F_pred, V_pred], dim=-1)
+    #print("X_next_frame shape: ", X_next_frame.shape)
             
-    return  mse_loss(X_next, X_next_pred)
+    return  mse_loss(X_next, X_next_frame)
 
 
 
@@ -345,13 +353,19 @@ def pbc_coord(coord: torch.Tensor, lattice: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: The coordinates after applying PBC. The shape is (batch_size, num_atoms, 3).
     """
+    # if coord has 4 dim
+    if len(coord.shape) == 4:
+        coord = coord.squeeze()
+    # print("coord shape: ", coord.shape)
+    # print("lattice shape: ", lattice.shape)
     # Calculate the fractional coordinates
     fractional_coord = torch.einsum('bji,bni->bnj', torch.inverse(lattice), coord)
     # Apply PBC
     fractional_coord = fractional_coord - torch.round(fractional_coord)
     # Convert back to Cartesian coordinates
     coord = torch.einsum('bji,bnj->bni', lattice, fractional_coord)
-    return coord
+
+    return coord.unsqueeze(1)
 
 
 def compute_min_distance_pbc_single_cell(
@@ -591,9 +605,9 @@ def normalize_md_rev(x):
     sigmas = np.std(x, axis=(0, 1), keepdims=True)
 
     # normalize pos
-    x[..., :3] = (x[..., :3] - means[..., :3]) / sigmas[..., :3]
+    x[..., :3] = (x[..., :3] - means[..., :3])  # / sigmas[..., :3]
     means[..., 3:] = 0.
-    sigmas[..., 3:] = 1.
+    sigmas[..., :] = 1.
 
     return x, means, sigmas
 

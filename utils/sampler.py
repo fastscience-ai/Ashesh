@@ -36,7 +36,7 @@ args = parser.parse_args([])
 
 cell_vector = torch.tensor([[[21.04, 0.0, 0.0], [0.0, 21.04, 0.0], [0.0, 0.0, 21.04]]])
 
-def sample_one_step_diff(model, 
+def sample_one_step_unified(model, 
         loss_definition: str,
         X_noisy: torch.Tensor, 
         X_0: torch.Tensor, 
