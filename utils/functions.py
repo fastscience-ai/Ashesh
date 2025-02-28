@@ -14,7 +14,7 @@ from typing import List, Dict, Tuple, Set, Union, Optional, Any, Callable
 from .args import get_parser
 
 parser = get_parser()
-args = parser.parse_args([])
+args = parser.parse_args()
 
 import math
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -39,21 +39,24 @@ def model_pbc_call(model,
         X_0: torch.Tensor,      # X_0
         t: torch.Tensor,
         temp: torch.Tensor,
-        lattice:torch.Tensor):
+        lattice:torch.Tensor,
+        loss_definition:str):
 
 
     device = X_t_orig.device
 
+    # warp X_noisy to pbc
     X_noisy_wrapped = torch.zeros_like(X_noisy, device=device)
-    
     X_noisy_wrapped[..., :3] = pbc_coord(X_noisy[..., :3], lattice)
     X_noisy_wrapped[..., 3:] = X_noisy[..., 3:]
     pred = model(X_noisy_wrapped, X_0, t, temp)
 
     dX = pred[... , :3]
 
-    V_pred = torch.zeros_like(X_t_orig, device=device)
-    F_pred = torch.zeros_like(X_t_orig, device=device)
+    V_pred = pred[..., -3:]
+    #V_pred = torch.zeros_like(X_t_orig, device=device)
+    F_pred = pred[..., 3:-3]
+    #F_pred = torch.zeros_like(X_t_orig, device=device)
     
     # dx = X(K+1, 0) - X(K, 0) x_t_orig : pred pbc X
     # dx = X(K+1, 0) - X(K, t) x_t_orig : ?
@@ -62,10 +65,16 @@ def model_pbc_call(model,
     # X(K+1,0) = X(K,t):X_t_orig + dX 
     
     # dX = pred
-    
-    X_next_pred = X_t_orig + dX
 
-    return X_next_pred, dX, V_pred, F_pred
+    if 'vdm' in loss_definition:
+        
+        return pred
+
+    else:
+    
+        X_next_pred = X_t_orig + dX
+
+        return X_next_pred, dX, V_pred, F_pred
     #return new_coord
 
 def mse_loss(output, target, wavenum_init = None,lamda_reg =None):
@@ -151,7 +160,18 @@ def one_step_loss_unified(model,
             
         case 'vdm':
 
-            X_noisy = forward_diffusion_sample(X_next, t, device)
+            X_noisy, noise = forward_diffusion_sample(X_next, t, device)
+            X_t_orig = X_noisy[..., :3] # used as a dummy variable. 
+
+            pred = model_pbc_call(model,
+                                X_t_orig,
+                                X_noisy,
+                                X_0,
+                                t,
+                                temp,
+                                lattice,
+                                loss_definition)
+            return mse_loss(noise, pred)
 
         case _:
                 
@@ -163,7 +183,8 @@ def one_step_loss_unified(model,
         X_0,
         t,
         temp,
-        lattice)
+        lattice,
+        loss_definition)
 
     X_next_frame = torch.cat([X_next_pred, F_pred, V_pred], dim=-1)
     #print("X_next_frame shape: ", X_next_frame.shape)
@@ -355,7 +376,7 @@ def pbc_coord(coord: torch.Tensor, lattice: torch.Tensor) -> torch.Tensor:
     """
     # if coord has 4 dim
     if len(coord.shape) == 4:
-        coord = coord.squeeze()
+        coord = coord.squeeze(1)
     # print("coord shape: ", coord.shape)
     # print("lattice shape: ", lattice.shape)
     # Calculate the fractional coordinates

@@ -2,7 +2,7 @@ from .functions import *
 from .args import get_parser
 
 parser = get_parser()
-args = parser.parse_args([])
+args = parser.parse_args()
 
 # # Define beta schedule
 # T = args.timesteps
@@ -46,7 +46,6 @@ def sample_one_step_unified(model,
 
   
         with torch.no_grad():
-            x_noisy = x_noisy.to(device)
             X_noisy = X_noisy.to(device)
             X_0 = X_0.to(device)
             t = t.to(device)
@@ -65,22 +64,30 @@ def sample_one_step_unified(model,
             case 'one_step_diff':
                 
                 X_t_orig = X_0[..., :3] # X(K,0) positoin
+
+            case 'vdm' : 
+                X_noisy[..., :3] = pbc_coord(X_noisy[..., :3], lattice)
+                #X_0[..., :3] = pbc_coord(X_0[..., :3], lattice)
+                X_next_frame = sample_next_frame(model, X_noisy, X_0, t, temp_cond)
+
+                return X_next_frame
                 
             case _:
                 
                 raise ValueError(f"Invalid loss definition: {loss_definition}")
                 
-        
+
         X_next_pred, dX, V_pred, F_pred = model_pbc_call(model,
                             X_t_orig,
                             X_noisy,
                             X_0,
                             t,
                             temp_cond,
-                            lattice)
-        
+                            lattice,
+                            loss_definition)
+        X_next_frame = torch.cat([X_next_pred, F_pred, V_pred], dim=-1)
         # noiseX_next_pred # _pred = +dX
-        return X_next_pred #condition + noise_pred # X + dx
+        return X_next_frame #condition + noise_pred # X + dx
         
 
 def sample_next_frame(model, x_noisy, condition, tt, temp_cond):

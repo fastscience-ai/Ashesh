@@ -133,11 +133,14 @@ def argon_dataset_rev(args):
     dataset_path = args.dataset_path
     batch_size = args.batch_size
     temp_ = args.temperature
+    dt_unit = args.dt_unit
     n_bunch = args.n_bunch # how much previous frames to use
     n_offset = int(args.n_offset - 1) # from how much distant frames to predict
 
     # gather dset per temperature
     assert isinstance(temp_, list), "Temperature should be a list"
+    print("dt = ", dt_unit)
+    print("offset = ", n_offset)
 
     tr_x, te_x, tr_y, te_y = [], [], [], []
     mean_list_x, std_list_x, mean_list_y, std_list_y = [], [], [], []
@@ -145,13 +148,21 @@ def argon_dataset_rev(args):
 
     for T in temp_:
         # discard the first tens of K frames
-        x_tensor=np.load(os.path.join(root, dataset_path, f"input_long_{T}K.npy"))[-4:]
-        y_tensor=np.load(os.path.join(root, dataset_path, f"output_long_{T}K.npy"))[-4:]
+        x_tensor=np.load(os.path.join(root, dataset_path, f"input_64_{T}.npy"))[-4:]
+        y_tensor=np.load(os.path.join(root, dataset_path, f"output_64_{T}.npy"))[-4:]
 
         s = np.shape(x_tensor)
         x_tensor = np.reshape(x_tensor, (s[0]*s[1],s[2], s[3])) # (s[0], s[1],s[2])) #
         y_tensor = np.reshape(y_tensor, (s[0]*s[1],s[2], s[3])) # (s[0], s[1],s[2]))# 
         assert np.shape(x_tensor) == np.shape(y_tensor), "x and y should have the same shape"
+
+        # # stride by timestep
+        # try : 
+        #     x_tensor = x_tensor[::dt_unit][:40000]
+        #     y_tensor = y_tensor[::dt_unit][:40000]
+        # except:
+        #     x_tensor = x_tensor[::dt_unit]
+        #     y_tensor = y_tensor[::dt_unit]
 
         # chunck params
         # offset : baicsally y is 1 frame ahead of x : 

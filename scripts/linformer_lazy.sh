@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -J md_unif
-#SBATCH -p cas_v100nv_8
+#SBATCH -p eme_h200nv_8
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks-per-node=1
@@ -21,10 +21,11 @@ cd $WORKSPACE_PATH
 echo "START"
 
 srun python $WORKSPACE_PATH/main_md_lazy_train.py\
- --how_to_sample "one_step_diff"\
- --learning_rate 1e-4 \
- --num_epochs 2501\
- --save_interval 50\
+ --how_to_sample "vdm"\
+ --learning_rate 5e-4 \
+ --n_offset 1 \
+ --num_epochs 6001\
+ --save_interval 100\
  --temperature 1000 \
  --t_selection 1000 \
  --t_to_simulate 1000

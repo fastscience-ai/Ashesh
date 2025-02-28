@@ -21,6 +21,7 @@ temperature_K = 1000.0
 supercell_size = (4,4,4)
 num_steps = 10000
 num_frames_per_step = 10
+dt = 5
 print("Running MD simulation at", temperature_K, "K")
 
 
@@ -87,10 +88,10 @@ MaxwellBoltzmannDistribution(atoms, temperature_K=temperature_K)
 atoms.set_momenta(atoms.get_momenta() - atoms.get_momenta().mean(axis=0))
 
 # Define the dynamics
-dyn = VelocityVerlet(atoms, 2.5 * units.fs)  # Time step is 2.5 fs
+dyn = VelocityVerlet(atoms, dt * units.fs)  # Time step is 2.5 fs
 
 # Setup the trajectory writer
-trajectory_filename = f'argon_trajectory_long_{int(temperature_K)}K.traj'
+trajectory_filename = f'argon_trajectory_long_{int(temperature_K)}K_{dt}fs.traj'
 traj_dir = os.path.join(args.root, 'dataset', trajectory_filename)
 traj = Trajectory(traj_dir, 'w', atoms)
 

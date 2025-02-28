@@ -20,12 +20,14 @@ cd $WORKSPACE_PATH
 
 echo "START"
 
-srun python $WORKSPACE_PATH/main_md_lazy.py\
- --how_to_sample "one_step_diff"\
- --num_epochs 2501\
- --save_interval 50\
- --temperature 300 500 1000 \
- --t_selection 300 500 1000 \
+srun python $WORKSPACE_PATH/main_md_lazy_train.py\
+ --how_to_sample "one_step_diff" \
+ --learning_rate 5e-4\
+ --n_offset 10 \
+ --num_epochs 7001\
+ --save_interval 250\
+ --temperature 200 300 500 800 \
+ --t_selection 200 300 500 800 \
  --t_to_simulate 1000
 
 

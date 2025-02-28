@@ -8,6 +8,8 @@ from utils.args import get_parser
 from utils.functions import *
 from utils.sampler import *
 from utils.data_loader import *
+from functools import partial
+
 from models.transformer_multiframe import *
 
 from torch.utils.data import DataLoader, TensorDataset
@@ -15,7 +17,7 @@ from torch.utils.data import DataLoader, TensorDataset
 #%%
 
 parser = get_parser()
-args = parser.parse_args([])
+args = parser.parse_args()
 print(args.root, args.temperature, args.temperature[0])
 
 # dataset selection
@@ -25,8 +27,8 @@ use_temp_embed = len(tmep_) >= 1
 
 # sampling strategy
 loss_calculator = one_step_loss_unified
-next_frame_sampler = sample_one_step_unified
 loss_definition = args.how_to_sample
+next_frame_sampler = partial(sample_one_step_unified, loss_definition = loss_definition)
 
 tr_x, te_x, tr_y, te_y, \
 mean_list_x, std_list_x, mean_list_y, std_list_y, \
@@ -56,11 +58,11 @@ learning_rate = args.learning_rate # 0.00001
 
 lr_milestones = None
 if num_epochs > 10:
-    lr_milestones = [num_epochs//3, num_epochs//3*2]
+    lr_milestones = [num_epochs//4, num_epochs//4*2, num_epochs//4*3]
 
 if not args.exp_name:
-    exp_name = f"md_ep{num_epochs}_unnormd_\
-single_temp_{args.temperature}K_T{args.timesteps}_lr{learning_rate}_lazy_{args.how_to_sample}"
+    exp_name = f"md_ep{num_epochs}_unnormd_rev_\
+{args.temperature}K_lr{learning_rate}_lazy_{args.how_to_sample}_dt_{args.n_offset}"
 else:
     exp_name = args.exp_name
 print("exp name : ", exp_name)
@@ -160,7 +162,7 @@ except:
 
 
 #Inference
-Nens = 1
+Nens = 20
 Nsteps = 2000 # number of experiments
 t_to_simulate = args.t_to_simulate
 
@@ -168,7 +170,9 @@ if t_to_simulate:
     # find the temperature index
     temp_diff = te_ts - t_to_simulate
     temp_idx = np.argmin(np.abs(temp_diff))
-    temp_cond = te_ts[temp_idx].unsqueeze(0).float().to(device)
+    #temp_cond = te_ts[temp_idx].unsqueeze(0).float().to(device)
+    print("initial t cond : ",  te_ts[temp_idx].unsqueeze(0).float().to(device))
+    temp_cond = torch.tensor([t_to_simulate / 1000.], device=device).float()
 else:
     temp_cond = te_ts[0].unsqueeze(0).float().to(device)
 
@@ -191,7 +195,12 @@ with torch.no_grad():
                 #print(x_noisy.device, x_0.device, tt.device)
                 cond = x_0
                 # sample
-                u = next_frame_sampler(model, x_noisy, x_0, tt, temp_cond)
+                u = next_frame_sampler(model = model, 
+                                        X_noisy = x_noisy, 
+                                        X_0 = x_0, 
+                                        t = tt, 
+                                        temp_cond = temp_cond,
+                                        lattice = cell_vector.float().cuda())
                 pred[k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
         else:
             mean_traj = torch.from_numpy(np.mean(pred [k-1,:,:,:,:],0).reshape([1,1,64,9])).float().to(device) 
@@ -199,16 +208,20 @@ with torch.no_grad():
             single_traj = torch.from_numpy(pred [k-1,0,:,:,:].reshape([1,1,64,9])).float().to(device)
             for ens in range (0, Nens):
                 if "one_step" in args.how_to_sample:
-                    # tt = torch.randint(0, T, (1,), device=device).long() # diffusion time step--> random tt 
-                    tt =  torch.tensor([T-1], device=device).long()
+                    tt = torch.randint(0, T, (1,), device=device).long() # diffusion time step--> random tt 
+                    # tt =  torch.tensor([T-1], device=device).long()
                 else:
                     tt =  torch.tensor([T-1], device=device).long()
                 # generate from pure noise : 
-                x_noisy, noise = forward_diffusion_sample(single_traj, tt, device)
+                x_noisy, noise = forward_diffusion_sample(mean_traj, tt, device)
                 x_noisy = x_noisy.unsqueeze(1)
-                cond = single_traj
                 # sample
-                u = next_frame_sampler(model, x_noisy, single_traj, tt, temp_cond)
+                u = next_frame_sampler(model = model, 
+                                        X_noisy = x_noisy, 
+                                        X_0 = mean_traj, 
+                                        t = tt, 
+                                        temp_cond = temp_cond,
+                                        lattice = cell_vector.float().cuda())
                 pred[k,ens,:,:,:] = np.squeeze(u.detach().cpu().numpy())
 #%%
 print(pred.shape, te_y.shape, np.array(mean_list_y).shape) #(100, 20, 1, 64, 9) torch.Size([100, 1, 64, 9])
@@ -224,7 +237,7 @@ else:
     pred_denorm = denormalize_md_pred(pred, mean_list_y, std_list_y)
     te_y_denorm = denormalize_md(te_y, mean_list_y, std_list_y)
 
-np.savez(os.path.join(args.result_path, f'./single_temp/{exp_name}'),pred_denorm,te_y_denorm[:Nsteps])
+np.savez(os.path.join(args.result_path, f'./single_temp/{exp_name}_mean_traj_rand_t_{args.t_to_simulate}'),pred_denorm,te_y_denorm[:Nsteps])
 print('Saved Predictions')
 
 # %%
