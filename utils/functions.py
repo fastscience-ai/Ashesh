@@ -161,6 +161,7 @@ def one_step_loss_unified(model,
         case 'vdm':
 
             X_noisy, noise = forward_diffusion_sample(X_next, t, device)
+            X_noisy = X_noisy.unsqueeze(1)
             X_t_orig = X_noisy[..., :3] # used as a dummy variable. 
 
             pred = model_pbc_call(model,
