@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J sh_test_md_egnn
+#SBATCH -J md_unif
 #SBATCH -p cas_v100nv_8
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -10,6 +10,7 @@
 #SBATCH -e /scratch/x2895a03/research/md-diffusion/Ashesh/logs/output_%x_%j.err
 
 source /home01/$USER/.bashrc
+export CUDA_TF32_OVERRIDE=False
 export CONDA_ENVS_PATH=/scratch/x2895a03/.conda/envs
 export CONDA_PKGS_DIRS=/scratch/x2895a03/.conda/pkgs
 conda activate smd
@@ -20,6 +21,16 @@ cd $WORKSPACE_PATH
 
 echo "START"
 
-srun python $WORKSPACE_PATH/main_md_egnn.py --gpu-list 0
+srun python $WORKSPACE_PATH/main_md_lazy_infer.py\
+ --calc_mode "infer"\
+ --how_to_sample "one_step_diff"\
+ --learning_rate 5e-4 \
+ --n_offset 10 \
+ --num_epochs 6001\
+ --save_interval 100\
+ --temperature 300 \
+ --t_selection 300 \
+ --t_to_simulate 300
+
 
 echo "DONE"

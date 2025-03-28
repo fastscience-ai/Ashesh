@@ -7,6 +7,7 @@ def get_parser():
     parser.add_argument("--dataset-path", type=str, default="dataset") 
     parser.add_argument("--result-path", type=str, default="results") 
     parser.add_argument("--model-type", type=str, default="egnn")
+    parser.add_argument("--calc_mode", type=str, default="train", choices=["train", "infer"])
 
     # dataset args
     parser.add_argument('--temperature', type=int, nargs='+', default=[1000])
