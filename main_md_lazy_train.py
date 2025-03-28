@@ -62,7 +62,7 @@ if num_epochs > 10:
 
 if not args.exp_name:
     exp_name = f"md_ep{num_epochs}_unnormd_rev_\
-{args.temperature}K_lr{learning_rate}_lazy_{args.how_to_sample}_dt_{args.n_offset}"
+{args.temperature}K_lr{learning_rate}_lazy_{args.how_to_sample}_dt_{args.n_offset}_sigma_0.25_diff"
 else:
     exp_name = args.exp_name
 print("exp name : ", exp_name)
