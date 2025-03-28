@@ -57,6 +57,16 @@ conda install -n md_diffusion -c conda-forge netCDF4
 * Currently all the experiments are running based on <code> main_md_lazy_train.py </code> and  <code> main_md_multi.py </code>.  To run training, run <code>./scripts/linformer_lazy.sh</code>. 
 * Additionaly refer to functions <code>model_pbc_call, one_step_loss_unified, pbc_coord</code> in  <code>utils/functions.py</code>, <code>sample_one_step_unified</code> in <code>sampler.py</code>. 
 
+<br>
+
+## 250328 Update 
+
+### Train and Inference
+**to train :** run ```/scripts/linformer_lazy_train.sh```. <br>
+**to generate samples :** run ```/scripts/linformer_lazy_eval.sh```. <br>
+Currently evaluation codes are part of the training code, which will divide into separate functions which targets for multi-frame inference.
+
+
 
 **Options**
 ```
